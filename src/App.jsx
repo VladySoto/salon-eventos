@@ -15,7 +15,7 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
         <Navbar />
-        <main className="max-w-5xl mx-auto">
+        <main className="max-w-5xl mx-auto pb-20 md:pb-0">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/cervezas" element={<Cervezas />} />
