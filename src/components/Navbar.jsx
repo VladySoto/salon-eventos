@@ -5,6 +5,8 @@ const links = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/cervezas', label: 'Cervezas', icon: '🍺' },
   { to: '/alquiler', label: 'Alquiler', icon: '🏛️' },
+  { to: '/garantias', label: 'Garantías', icon: '🛡️' },
+
 ]
 
 function Navbar() {
