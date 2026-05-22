@@ -67,28 +67,45 @@ function Dashboard() {
       <p className="text-gray-500 mt-1 mb-4 text-sm">Resumen general del negocio</p>
 
       {/* Alertas */}
-      {(deudaDistribuidor > 0 || cajasPendientes > 100 || saldoPendienteTotal > 0) && (
-        <div className="mb-4 flex flex-col gap-2">
-          {deudaDistribuidor > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <span className="mt-0.5">⚠️</span>
-              <p className="text-sm text-red-700">Deuda de <strong>Bs. {deudaDistribuidor.toFixed(2)}</strong> con el distribuidor</p>
-            </div>
-          )}
-          {cajasPendientes > 100 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <span className="mt-0.5">📦</span>
-              <p className="text-sm text-orange-700"><strong>{cajasPendientes} cajas vacías</strong> pendientes</p>
-            </div>
-          )}
-          {saldoPendienteTotal > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <span className="mt-0.5">💰</span>
-              <p className="text-sm text-yellow-700"><strong>Bs. {saldoPendienteTotal.toFixed(2)}</strong> en saldos pendientes</p>
-            </div>
-          )}
+{(() => {
+  const eventosHoy = eventos.filter(e => e.fecha === hoyStr && e.estado === 'reservado' && Number(e.saldo_pendiente) > 0)
+  const garantiasPendientesHoy = []
+  eventos.forEach(e => {
+    const gs = e.garantias || []
+  })
+
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      {eventosHoy.map(e => (
+        <div key={e.id} className="bg-blue-600 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="mt-0.5 text-white text-lg">🔔</span>
+          <div>
+            <p className="text-sm text-white font-medium">Evento hoy — {e.clientes?.nombre}</p>
+            <p className="text-xs text-blue-100">Saldo pendiente de cobrar: <strong>Bs. {Number(e.saldo_pendiente).toFixed(2)}</strong></p>
+          </div>
+        </div>
+      ))}
+      {deudaDistribuidor > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="mt-0.5">⚠️</span>
+          <p className="text-sm text-red-700">Deuda de <strong>Bs. {deudaDistribuidor.toFixed(2)}</strong> con el distribuidor</p>
         </div>
       )}
+      {cajasPendientes > 100 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="mt-0.5">📦</span>
+          <p className="text-sm text-orange-700"><strong>{cajasPendientes} cajas vacías</strong> pendientes</p>
+        </div>
+      )}
+      {saldoPendienteTotal > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="mt-0.5">💰</span>
+          <p className="text-sm text-yellow-700"><strong>Bs. {saldoPendienteTotal.toFixed(2)}</strong> en saldos pendientes</p>
+        </div>
+      )}
+    </div>
+  )
+})()}
 
       {/* Calendario anual */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
