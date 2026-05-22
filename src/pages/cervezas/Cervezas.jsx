@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
+import Toast from '../../components/Toast'
 
 function obtenerFechaHoy() {
   return new Date().toISOString().split('T')[0]
@@ -30,6 +31,12 @@ function Cervezas() {
     cargarCajas()
   }, [])
 
+  const [toast, setToast] = useState(null)
+
+  function mostrarToast(mensaje, tipo = 'exito') {
+  setToast({ mensaje, tipo })
+  }
+
   async function cargarCompras() {
     const { data } = await supabase.from('compras_cerveza').select('*').order('created_at', { ascending: false })
     if (data) setCompras(data)
@@ -57,9 +64,12 @@ function Cervezas() {
       fecha: form.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
     })
     if (!error) {
-      setForm({ fecha: obtenerFechaHoy(), cantidad_cajas: '', precio_unitario: '', monto_pagado: '' })
-      cargarCompras()
-    }
+  setForm({ fecha: obtenerFechaHoy(), cantidad_cajas: '', precio_unitario: '', monto_pagado: '' })
+  cargarCompras()
+  mostrarToast('Compra registrada correctamente')
+} else {
+  mostrarToast('Error al registrar la compra', 'error')
+}
     setLoading(false)
   }
 
@@ -73,9 +83,12 @@ function Cervezas() {
       fecha: formCajas.fecha, tipo: formCajas.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(formCajas.monto) || 0
     })
     if (!error) {
-      setFormCajas({ fecha: obtenerFechaHoy(), tipo: '', cajas_recibidas: '', monto: '' })
-      cargarCajas()
-    }
+  setFormCajas({ fecha: obtenerFechaHoy(), tipo: '', cajas_recibidas: '', monto: '' })
+  cargarCajas()
+  mostrarToast('Movimiento de cajas registrado')
+} else {
+  mostrarToast('Error al registrar', 'error')
+}
     setLoading(false)
   }
 
@@ -91,6 +104,7 @@ function Cervezas() {
     }).eq('id', editandoCompra.id)
     setEditandoCompra(null)
     cargarCompras()
+    mostrarToast('Compra actualizada correctamente')
     setLoading(false)
   }
 
@@ -104,19 +118,22 @@ function Cervezas() {
     }).eq('id', editandoCaja.id)
     setEditandoCaja(null)
     cargarCajas()
+    mostrarToast('Registro actualizado correctamente')
     setLoading(false)
   }
 
   async function eliminarCompra(id) {
     if (!confirm('¿Seguro que querés eliminar esta compra?')) return
     await supabase.from('compras_cerveza').delete().eq('id', id)
-    cargarCompras()
+cargarCompras()
+mostrarToast('Compra eliminada', 'alerta')
   }
 
   async function eliminarCaja(id) {
     if (!confirm('¿Seguro que querés eliminar este registro?')) return
     await supabase.from('cajas_vacias').delete().eq('id', id)
-    cargarCajas()
+cargarCajas()
+mostrarToast('Registro eliminado', 'alerta')
   }
 
   const totalDeuda = compras.reduce((acc, c) => acc + Number(c.deuda_pendiente), 0)
@@ -346,6 +363,7 @@ function Cervezas() {
           </div>
         </div>
       )}
+      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
+import Toast from '../../components/Toast'
 
 function obtenerFechaLimite() {
   const fecha = new Date()
@@ -14,6 +15,7 @@ function Alquiler() {
   const [tab, setTab] = useState('reservas')
   const [editandoEvento, setEditandoEvento] = useState(null)
   const [modalGarantia, setModalGarantia] = useState(null)
+  const [toast, setToast] = useState(null)
   const [formGarantia, setFormGarantia] = useState({
     cajas_llevadas: '',
     botellas_llevadas: '',
@@ -36,6 +38,10 @@ function Alquiler() {
     incluye_lavado: false,
     monto_lavado: ''
   })
+
+  function mostrarToast(mensaje, tipo = 'exito') {
+    setToast({ mensaje, tipo })
+  }
 
   useEffect(() => { cargarEventos() }, [])
 
@@ -85,55 +91,66 @@ function Alquiler() {
   const saldoPendiente = montoTotalFinal - adelanto
 
   async function handleSubmit(e) {
-  e.preventDefault()
-  setLoading(true)
+    e.preventDefault()
+    setLoading(true)
 
-  // Verificar si la fecha ya está ocupada
-  const { data: eventosExistentes } = await supabase
-    .from('eventos')
-    .select('id, fecha, fecha_fin, clientes(nombre)')
-    .neq('estado', 'completado')
+    const { data: eventosExistentes } = await supabase
+      .from('eventos')
+      .select('id, fecha, fecha_fin, clientes(nombre)')
+      .neq('estado', 'completado')
 
-  const fechaInicio = form.fecha
-  const fechaFin = form.dos_dias ? form.fecha_fin : form.fecha
+    const fechaInicio = form.fecha
+    const fechaFin = form.dos_dias ? form.fecha_fin : form.fecha
 
-  const conflicto = eventosExistentes?.find(e => {
-    const eInicio = e.fecha
-    const eFin = e.fecha_fin || e.fecha
-    return fechaInicio <= eFin && fechaFin >= eInicio
-  })
+    const conflicto = eventosExistentes?.find(e => {
+      const eInicio = e.fecha
+      const eFin = e.fecha_fin || e.fecha
+      return fechaInicio <= eFin && fechaFin >= eInicio
+    })
 
-  if (conflicto) {
-    alert(`❌ Fecha ocupada — Ya existe un evento de ${conflicto.clientes?.nombre} el ${conflicto.fecha}${conflicto.fecha_fin ? ` al ${conflicto.fecha_fin}` : ''}. Elegí otra fecha.`)
+    if (conflicto) {
+      mostrarToast(`Fecha ocupada — ya hay un evento de ${conflicto.clientes?.nombre} el ${conflicto.fecha}`, 'error')
+      setLoading(false)
+      return
+    }
+
+    const { data: cliente, error: errorCliente } = await supabase
+      .from('clientes')
+      .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
+      .select().single()
+
+    if (errorCliente) {
+      mostrarToast('Error al registrar el cliente', 'error')
+      setLoading(false)
+      return
+    }
+
+    const { error: errorEvento } = await supabase.from('eventos').insert({
+      cliente_id: cliente.id,
+      tipo_evento: form.tipo_evento,
+      fecha: form.fecha,
+      fecha_fin: form.dos_dias ? form.fecha_fin : null,
+      observaciones: form.observaciones,
+      adelanto: adelanto,
+      saldo_pendiente: saldoPendiente > 0 ? saldoPendiente : 0,
+      estado: 'reservado'
+    })
+
+    if (!errorEvento) {
+      setForm({ nombre: '', ci_nit: '', telefono: '', telefono2: '', tipo_evento: '', fecha: '', dos_dias: false, fecha_fin: '', observaciones: '', monto_total: '', adelanto: '', incluye_lavado: false, monto_lavado: '' })
+      cargarEventos()
+      mostrarToast('Reserva registrada correctamente')
+    } else {
+      mostrarToast('Error al registrar la reserva', 'error')
+    }
+
     setLoading(false)
-    return
   }
-
-  const { data: cliente, error: errorCliente } = await supabase
-    .from('clientes')
-    .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
-    .select().single()
-  if (errorCliente) { setLoading(false); return }
-
-  await supabase.from('eventos').insert({
-    cliente_id: cliente.id,
-    tipo_evento: form.tipo_evento,
-    fecha: form.fecha,
-    fecha_fin: form.dos_dias ? form.fecha_fin : null,
-    observaciones: form.observaciones,
-    adelanto: adelanto,
-    saldo_pendiente: saldoPendiente > 0 ? saldoPendiente : 0,
-    estado: 'reservado'
-  })
-
-  setForm({ nombre: '', ci_nit: '', telefono: '', telefono2: '', tipo_evento: '', fecha: '', dos_dias: false, fecha_fin: '', observaciones: '', monto_total: '', adelanto: '', incluye_lavado: false, monto_lavado: '' })
-  cargarEventos()
-  setLoading(false)
-}
 
   async function marcarPagado(eventoId) {
     await supabase.from('eventos').update({ saldo_pendiente: 0, estado: 'completado' }).eq('id', eventoId)
     cargarEventos()
+    mostrarToast('Saldo marcado como pagado')
   }
 
   async function eliminarEvento(eventoId) {
@@ -141,6 +158,7 @@ function Alquiler() {
     await supabase.from('garantias').delete().eq('evento_id', eventoId)
     await supabase.from('eventos').delete().eq('id', eventoId)
     cargarEventos()
+    mostrarToast('Evento eliminado', 'alerta')
   }
 
   async function guardarEdicionEvento() {
@@ -162,13 +180,14 @@ function Alquiler() {
     }).eq('id', editandoEvento.id)
     setEditandoEvento(null)
     cargarEventos()
+    mostrarToast('Evento actualizado correctamente')
     setLoading(false)
   }
 
   async function registrarGarantia(e) {
     e.preventDefault()
     setLoading(true)
-    await supabase.from('garantias').insert({
+    const { error } = await supabase.from('garantias').insert({
       evento_id: modalGarantia.id,
       cliente_nombre: modalGarantia.clientes?.nombre,
       cajas_llevadas: parseInt(formGarantia.cajas_llevadas) || 0,
@@ -178,21 +197,28 @@ function Alquiler() {
       observaciones: formGarantia.observaciones,
       estado: 'pendiente'
     })
-    setModalGarantia(null)
-    setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' })
-    cargarEventos()
+    if (!error) {
+      setModalGarantia(null)
+      setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' })
+      cargarEventos()
+      mostrarToast('Garantía registrada correctamente')
+    } else {
+      mostrarToast('Error al registrar la garantía', 'error')
+    }
     setLoading(false)
   }
 
   async function marcarGarantiaDevuelta(id) {
     await supabase.from('garantias').update({ estado: 'devuelta' }).eq('id', id)
     cargarEventos()
+    mostrarToast('Garantía marcada como devuelta')
   }
 
   async function eliminarGarantia(id) {
     if (!confirm('¿Eliminar esta garantía?')) return
     await supabase.from('garantias').delete().eq('id', id)
     cargarEventos()
+    mostrarToast('Garantía eliminada', 'alerta')
   }
 
   const hoy = new Date().toISOString().split('T')[0]
@@ -268,40 +294,15 @@ function Alquiler() {
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">CI / NIT</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  name="ci_nit"
-                  value={form.ci_nit}
-                  onChange={handleChange}
-                  placeholder="Ej: 12345678"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                />
+                <input type="tel" inputMode="numeric" name="ci_nit" value={form.ci_nit} onChange={handleChange} placeholder="Ej: 12345678" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 1</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  name="telefono"
-                  value={form.telefono}
-                  onChange={handleChange}
-                  placeholder="Ej: 70012345"
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                />
+                <input type="tel" inputMode="numeric" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Ej: 70012345" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 2 (opcional)</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  name="telefono2"
-                  value={form.telefono2}
-                  onChange={handleChange}
-                  placeholder="Ej: 60098765"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                />
+                <input type="tel" inputMode="numeric" name="telefono2" value={form.telefono2} onChange={handleChange} placeholder="Ej: 60098765" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo de evento</label>
@@ -522,13 +523,7 @@ function Alquiler() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Nombre</label>
-                <input
-                  type="text"
-                  value={editandoEvento.clientes?.nombre || ''}
-                  onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, nombre: e.target.value.replace(/\b\w/g, l => l.toUpperCase())}})}
-                  autoCapitalize="words"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
-                />
+                <input type="text" value={editandoEvento.clientes?.nombre || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, nombre: e.target.value.replace(/\b\w/g, l => l.toUpperCase())}})} autoCapitalize="words" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">CI / NIT</label>
@@ -585,6 +580,8 @@ function Alquiler() {
           </div>
         </div>
       )}
+
+      {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
   )
 }
