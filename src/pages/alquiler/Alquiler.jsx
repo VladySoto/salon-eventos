@@ -85,27 +85,51 @@ function Alquiler() {
   const saldoPendiente = montoTotalFinal - adelanto
 
   async function handleSubmit(e) {
-    e.preventDefault()
-    setLoading(true)
-    const { data: cliente, error: errorCliente } = await supabase
-      .from('clientes')
-      .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
-      .select().single()
-    if (errorCliente) { setLoading(false); return }
-    await supabase.from('eventos').insert({
-      cliente_id: cliente.id,
-      tipo_evento: form.tipo_evento,
-      fecha: form.fecha,
-      fecha_fin: form.dos_dias ? form.fecha_fin : null,
-      observaciones: form.observaciones,
-      adelanto: adelanto,
-      saldo_pendiente: saldoPendiente > 0 ? saldoPendiente : 0,
-      estado: 'reservado'
-    })
-    setForm({ nombre: '', ci_nit: '', telefono: '', telefono2: '', tipo_evento: '', fecha: '', dos_dias: false, fecha_fin: '', observaciones: '', monto_total: '', adelanto: '', incluye_lavado: false, monto_lavado: '' })
-    cargarEventos()
+  e.preventDefault()
+  setLoading(true)
+
+  // Verificar si la fecha ya está ocupada
+  const { data: eventosExistentes } = await supabase
+    .from('eventos')
+    .select('id, fecha, fecha_fin, clientes(nombre)')
+    .neq('estado', 'completado')
+
+  const fechaInicio = form.fecha
+  const fechaFin = form.dos_dias ? form.fecha_fin : form.fecha
+
+  const conflicto = eventosExistentes?.find(e => {
+    const eInicio = e.fecha
+    const eFin = e.fecha_fin || e.fecha
+    return fechaInicio <= eFin && fechaFin >= eInicio
+  })
+
+  if (conflicto) {
+    alert(`❌ Fecha ocupada — Ya existe un evento de ${conflicto.clientes?.nombre} el ${conflicto.fecha}${conflicto.fecha_fin ? ` al ${conflicto.fecha_fin}` : ''}. Elegí otra fecha.`)
     setLoading(false)
+    return
   }
+
+  const { data: cliente, error: errorCliente } = await supabase
+    .from('clientes')
+    .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
+    .select().single()
+  if (errorCliente) { setLoading(false); return }
+
+  await supabase.from('eventos').insert({
+    cliente_id: cliente.id,
+    tipo_evento: form.tipo_evento,
+    fecha: form.fecha,
+    fecha_fin: form.dos_dias ? form.fecha_fin : null,
+    observaciones: form.observaciones,
+    adelanto: adelanto,
+    saldo_pendiente: saldoPendiente > 0 ? saldoPendiente : 0,
+    estado: 'reservado'
+  })
+
+  setForm({ nombre: '', ci_nit: '', telefono: '', telefono2: '', tipo_evento: '', fecha: '', dos_dias: false, fecha_fin: '', observaciones: '', monto_total: '', adelanto: '', incluye_lavado: false, monto_lavado: '' })
+  cargarEventos()
+  setLoading(false)
+}
 
   async function marcarPagado(eventoId) {
     await supabase.from('eventos').update({ saldo_pendiente: 0, estado: 'completado' }).eq('id', eventoId)
