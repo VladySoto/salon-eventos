@@ -37,9 +37,7 @@ function Alquiler() {
     monto_lavado: ''
   })
 
-  useEffect(() => {
-    cargarEventos()
-  }, [])
+  useEffect(() => { cargarEventos() }, [])
 
   async function cargarEventos() {
     const { data } = await supabase
@@ -55,10 +53,7 @@ function Alquiler() {
   async function cargarGarantias(eventosData) {
     const ids = eventosData.map(e => e.id)
     if (ids.length === 0) return
-    const { data } = await supabase
-      .from('garantias')
-      .select('*')
-      .in('evento_id', ids)
+    const { data } = await supabase.from('garantias').select('*').in('evento_id', ids)
     if (data) {
       const porEvento = {}
       data.forEach(g => {
@@ -190,6 +185,20 @@ function Alquiler() {
   const eventosCompletados = eventos.filter(e => e.estado === 'completado')
   const totalSaldoPendiente = eventos.filter(e => e.estado === 'reservado').reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
 
+  const opcionesTipoEvento = (
+    <>
+      <option value="">Seleccioná</option>
+      <option value="cumpleaños">Cumpleaños</option>
+      <option value="matrimonio_catolico">Matrimonio Católico</option>
+      <option value="matrimonio_cristiano">Matrimonio Cristiano</option>
+      <option value="bautizo">Bautizo</option>
+      <option value="quinceañera">Quinceañera</option>
+      <option value="reunion">Reunión</option>
+      <option value="cabo_de_año">Cabo de Año</option>
+      <option value="otro">Otro</option>
+    </>
+  )
+
   return (
     <div className="p-4 md:p-6">
       <h1 className="text-xl md:text-2xl font-bold text-gray-800">Módulo de Alquiler</h1>
@@ -222,30 +231,58 @@ function Alquiler() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Nombre del cliente</label>
-                <input type="text" name="nombre" value={form.nombre} onChange={handleChange} placeholder="Ej: Juan Pérez" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input
+                  type="text"
+                  name="nombre"
+                  value={form.nombre}
+                  onChange={e => setForm({...form, nombre: e.target.value.replace(/\b\w/g, l => l.toUpperCase())})}
+                  placeholder="Ej: Juan Pérez"
+                  required
+                  autoCapitalize="words"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">CI / NIT</label>
-                <input type="text" name="ci_nit" value={form.ci_nit} onChange={handleChange} placeholder="Ej: 12345678" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  name="ci_nit"
+                  value={form.ci_nit}
+                  onChange={handleChange}
+                  placeholder="Ej: 12345678"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 1</label>
-                <input type="text" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Ej: 70012345" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  name="telefono"
+                  value={form.telefono}
+                  onChange={handleChange}
+                  placeholder="Ej: 70012345"
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 2 (opcional)</label>
-                <input type="text" name="telefono2" value={form.telefono2} onChange={handleChange} placeholder="Ej: 60098765" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  name="telefono2"
+                  value={form.telefono2}
+                  onChange={handleChange}
+                  placeholder="Ej: 60098765"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo de evento</label>
                 <select name="tipo_evento" value={form.tipo_evento} onChange={handleChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
-                  <option value="">Seleccioná</option>
-                  <option value="cumpleaños">Cumpleaños</option>
-                  <option value="boda">Boda</option>
-                  <option value="bautizo">Bautizo</option>
-                  <option value="quinceañera">Quinceañera</option>
-                  <option value="reunion">Reunión</option>
-                  <option value="otro">Otro</option>
+                  {opcionesTipoEvento}
                 </select>
               </div>
               <div>
@@ -333,7 +370,6 @@ function Alquiler() {
                 const garantiasPendientes = garantiasEvento.filter(g => g.estado === 'pendiente')
                 return (
                   <div key={e.id} className={`border rounded-xl overflow-hidden ${e.estado === 'completado' ? 'border-green-200' : Number(e.saldo_pendiente) > 0 ? 'border-yellow-200' : 'border-gray-200'}`}>
-                    {/* Datos del evento */}
                     <div className={`p-4 ${e.estado === 'completado' ? 'bg-green-50' : Number(e.saldo_pendiente) > 0 ? 'bg-yellow-50' : 'bg-white'}`}>
                       <div className="flex justify-between items-start mb-3">
                         <div>
@@ -363,7 +399,6 @@ function Alquiler() {
                       </div>
                     </div>
 
-                    {/* Garantías del evento */}
                     {garantiasEvento.length > 0 && (
                       <div className="border-t border-gray-100 bg-gray-50 p-3">
                         <p className="text-xs font-medium text-gray-500 mb-2">🛡️ Garantías {garantiasPendientes.length > 0 && <span className="text-orange-500">({garantiasPendientes.length} pendiente{garantiasPendientes.length > 1 ? 's' : ''})</span>}</p>
@@ -463,29 +498,30 @@ function Alquiler() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Nombre</label>
-                <input type="text" value={editandoEvento.clientes?.nombre || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, nombre: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input
+                  type="text"
+                  value={editandoEvento.clientes?.nombre || ''}
+                  onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, nombre: e.target.value.replace(/\b\w/g, l => l.toUpperCase())}})}
+                  autoCapitalize="words"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">CI / NIT</label>
-                <input type="text" value={editandoEvento.clientes?.ci_nit || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, ci_nit: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="tel" inputMode="numeric" value={editandoEvento.clientes?.ci_nit || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, ci_nit: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 1</label>
-                <input type="text" value={editandoEvento.clientes?.telefono || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, telefono: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="tel" inputMode="numeric" value={editandoEvento.clientes?.telefono || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, telefono: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 2</label>
-                <input type="text" value={editandoEvento.clientes?.telefono2 || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, telefono2: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="tel" inputMode="numeric" value={editandoEvento.clientes?.telefono2 || ''} onChange={e => setEditandoEvento({...editandoEvento, clientes: {...editandoEvento.clientes, telefono2: e.target.value}})} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo de evento</label>
                 <select name="tipo_evento" value={editandoEvento.tipo_evento} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
-                  <option value="cumpleaños">Cumpleaños</option>
-                  <option value="boda">Boda</option>
-                  <option value="bautizo">Bautizo</option>
-                  <option value="quinceañera">Quinceañera</option>
-                  <option value="reunion">Reunión</option>
-                  <option value="otro">Otro</option>
+                  {opcionesTipoEvento}
                 </select>
               </div>
               <div>
