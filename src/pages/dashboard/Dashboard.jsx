@@ -4,6 +4,40 @@ import { supabase } from '../../supabase'
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS_SEMANA = ['L','M','M','J','V','S','D']
 
+function CalendarDay({ dia, isHeader, esHoy, tieneCompletado, tienePendiente, tieneEvento, onClick, title }) {
+  if (isHeader) {
+    return (
+      <div className="flex items-center justify-center text-gray-300 font-medium" style={{ fontSize: '9px', padding: '1px 0' }}>
+        {dia}
+      </div>
+    )
+  }
+
+  let cls = 'flex items-center justify-center rounded-md transition-colors text-gray-600'
+  if (tieneEvento) cls += ' cursor-pointer'
+
+  if (esHoy) {
+    cls = 'flex items-center justify-center rounded-full bg-blue-600 text-white font-medium cursor-pointer'
+  } else if (tieneCompletado) {
+    cls += ' bg-green-100 text-green-800 font-medium hover:bg-green-200'
+  } else if (tienePendiente) {
+    cls += ' bg-yellow-100 text-yellow-800 font-medium hover:bg-yellow-200'
+  } else {
+    cls += ' hover:bg-gray-100'
+  }
+
+  return (
+    <div
+      className={cls}
+      style={{ fontSize: '10px', width: '18px', height: '18px', margin: '0 auto' }}
+      onClick={tieneEvento ? onClick : undefined}
+      title={title}
+    >
+      {dia}
+    </div>
+  )
+}
+
 function obtenerDiasSemana(year, month) {
   const dias = []
   const primerDia = new Date(year, month, 1).getDay()
@@ -45,7 +79,9 @@ function Dashboard() {
   const eventosProximos = eventos.filter(e => e.fecha >= hoyStr && e.estado === 'reservado')
   const eventosEsteMes = eventos.filter(e => e.fecha >= inicioMes && e.estado === 'completado')
   const saldoPendienteTotal = eventos.filter(e => e.estado === 'reservado').reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
-  const gananciasEsteMes = eventos.filter(e => e.fecha >= inicioMes).reduce((acc, e) => acc + Number(e.adelanto), 0)
+  const adelantosEsteMes = eventos.filter(e => e.created_at?.slice(0, 10) >= inicioMes).reduce((acc, e) => acc + Number(e.adelanto), 0)
+  const saldosCobradosEsteMes = eventos.filter(e => e.fecha_pago && e.fecha_pago >= inicioMes).reduce((acc, e) => acc + Number(e.monto_saldo_cobrado ?? 0), 0)
+  const gananciasEsteMes = adelantosEsteMes + saldosCobradosEsteMes
 
   function obtenerEventosDia(year, month, day) {
     const fecha = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -69,10 +105,6 @@ function Dashboard() {
       {/* Alertas */}
 {(() => {
   const eventosHoy = eventos.filter(e => e.fecha === hoyStr && e.estado === 'reservado' && Number(e.saldo_pendiente) > 0)
-  const garantiasPendientesHoy = []
-  eventos.forEach(e => {
-    const gs = e.garantias || []
-  })
 
   return (
     <div className="mb-4 flex flex-col gap-2">
@@ -123,39 +155,34 @@ function Dashboard() {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {MESES.map((mes, mesIdx) => {
             const dias = obtenerDiasSemana(anio, mesIdx)
             return (
-              <div key={mesIdx}>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{mes}</p>
+              <div key={mesIdx} className="rounded-xl border border-gray-100 p-2" style={{ boxShadow: '0px 2px 1.5px 0px #A5AEB852 inset' }}>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 px-1">{mes}</p>
                 <div className="grid grid-cols-7 gap-px">
                   {DIAS_SEMANA.map((d, i) => (
-                    <div key={i} className="text-center text-gray-300 font-medium" style={{ fontSize: '9px', padding: '1px 0' }}>{d}</div>
+                    <CalendarDay key={`h-${mesIdx}-${i}`} dia={d} isHeader />
                   ))}
                   {dias.map((dia, i) => {
-                    if (!dia) return <div key={i}></div>
+                    if (!dia) return <div key={i} style={{ width: '18px', height: '18px' }} />
                     const evsDelDia = obtenerEventosDia(anio, mesIdx, dia)
                     const esHoy = anio === hoy.getFullYear() && mesIdx === hoy.getMonth() && dia === hoy.getDate()
                     const tieneCompletado = evsDelDia.some(e => e.estado === 'completado')
                     const tienePendiente = evsDelDia.some(e => e.estado === 'reservado')
                     const tieneEvento = evsDelDia.length > 0
-                    let clase = 'text-center cursor-pointer rounded hover:bg-gray-100 transition-colors text-gray-600'
-                    let estilo = { fontSize: '10px', padding: '2px 1px' }
-                    if (esHoy) {
-                      clase = 'text-center cursor-pointer rounded-full bg-blue-600 text-white font-medium'
-                      estilo = { fontSize: '10px', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }
-                    } else if (tieneCompletado) {
-                      clase = 'text-center cursor-pointer rounded bg-green-100 text-green-800 font-medium'
-                      estilo = { fontSize: '10px', padding: '2px 1px' }
-                    } else if (tienePendiente) {
-                      clase = 'text-center cursor-pointer rounded bg-yellow-100 text-yellow-800 font-medium'
-                      estilo = { fontSize: '10px', padding: '2px 1px' }
-                    }
                     return (
-                      <div key={i} className={clase} style={estilo} onClick={() => tieneEvento && handleClickDia(anio, mesIdx, dia)} title={tieneEvento ? evsDelDia.map(e => e.clientes?.nombre).join(', ') : ''}>
-                        {dia}
-                      </div>
+                      <CalendarDay
+                        key={i}
+                        dia={dia}
+                        esHoy={esHoy}
+                        tieneCompletado={tieneCompletado}
+                        tienePendiente={tienePendiente}
+                        tieneEvento={tieneEvento}
+                        onClick={() => handleClickDia(anio, mesIdx, dia)}
+                        title={tieneEvento ? evsDelDia.map(e => e.clientes?.nombre).join(', ') : ''}
+                      />
                     )
                   })}
                 </div>

@@ -43,7 +43,17 @@ function Alquiler() {
     setToast({ mensaje, tipo })
   }
 
-  useEffect(() => { cargarEventos() }, [])
+  useEffect(() => { cargarEventos(); verificarGarantiasVencidas() }, [])
+
+  async function verificarGarantiasVencidas() {
+    const hoy = new Date().toISOString().split('T')[0]
+    await supabase
+      .from('garantias')
+      .update({ estado: 'ejecutada' })
+      .eq('estado', 'pendiente')
+      .lt('fecha_limite', hoy)
+    cargarEventos()
+  }
 
   async function cargarEventos() {
     const { data } = await supabase
@@ -114,15 +124,39 @@ function Alquiler() {
       return
     }
 
-    const { data: cliente, error: errorCliente } = await supabase
+    const filtrosCliente = [`telefono.eq.${form.telefono}`, `telefono2.eq.${form.telefono}`]
+    if (form.ci_nit) filtrosCliente.push(`ci_nit.eq.${form.ci_nit}`)
+    const { data: clienteExistente } = await supabase
       .from('clientes')
-      .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
-      .select().single()
+      .select('*')
+      .or(filtrosCliente.join(','))
+      .limit(1)
+      .maybeSingle()
 
-    if (errorCliente) {
-      mostrarToast('Error al registrar el cliente', 'error')
-      setLoading(false)
-      return
+    let cliente
+    if (clienteExistente) {
+      const { data: clienteActualizado, error: errorCliente } = await supabase
+        .from('clientes')
+        .update({ nombre: form.nombre, ci_nit: form.ci_nit || clienteExistente.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || clienteExistente.telefono2 })
+        .eq('id', clienteExistente.id)
+        .select().single()
+      if (errorCliente) {
+        mostrarToast('Error al actualizar el cliente', 'error')
+        setLoading(false)
+        return
+      }
+      cliente = clienteActualizado
+    } else {
+      const { data: clienteNuevo, error: errorCliente } = await supabase
+        .from('clientes')
+        .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
+        .select().single()
+      if (errorCliente) {
+        mostrarToast('Error al registrar el cliente', 'error')
+        setLoading(false)
+        return
+      }
+      cliente = clienteNuevo
     }
 
     const { error: errorEvento } = await supabase.from('eventos').insert({
@@ -147,16 +181,30 @@ function Alquiler() {
     setLoading(false)
   }
 
-  async function marcarPagado(eventoId) {
-    await supabase.from('eventos').update({ saldo_pendiente: 0, estado: 'completado' }).eq('id', eventoId)
+  async function marcarPagado(evento) {
+    const hoy = new Date().toISOString().split('T')[0]
+    await supabase.from('eventos').update({
+      saldo_pendiente: 0,
+      estado: 'completado',
+      fecha_pago: hoy,
+      monto_saldo_cobrado: Number(evento.saldo_pendiente) || 0
+    }).eq('id', evento.id)
     cargarEventos()
     mostrarToast('Saldo marcado como pagado')
   }
 
   async function eliminarEvento(eventoId) {
     if (!confirm('¿Seguro que querés eliminar este evento?')) return
+    const evento = eventos.find(e => e.id === eventoId)
     await supabase.from('garantias').delete().eq('evento_id', eventoId)
     await supabase.from('eventos').delete().eq('id', eventoId)
+    if (evento?.cliente_id) {
+      const { count } = await supabase
+        .from('eventos')
+        .select('id', { count: 'exact', head: true })
+        .eq('cliente_id', evento.cliente_id)
+      if (!count) await supabase.from('clientes').delete().eq('id', evento.cliente_id)
+    }
     cargarEventos()
     mostrarToast('Evento eliminado', 'alerta')
   }
@@ -169,14 +217,17 @@ function Alquiler() {
       telefono: editandoEvento.clientes.telefono,
       telefono2: editandoEvento.clientes.telefono2 || null
     }).eq('id', editandoEvento.clientes.id)
+    const seCompletaAhora = editandoEvento.estado === 'completado' && !editandoEvento.fecha_pago
+    const saldoIngresado = parseFloat(editandoEvento.saldo_pendiente) || 0
     await supabase.from('eventos').update({
       tipo_evento: editandoEvento.tipo_evento,
       fecha: editandoEvento.fecha,
       fecha_fin: editandoEvento.fecha_fin || null,
       observaciones: editandoEvento.observaciones,
       adelanto: parseFloat(editandoEvento.adelanto) || 0,
-      saldo_pendiente: parseFloat(editandoEvento.saldo_pendiente) || 0,
-      estado: editandoEvento.estado
+      saldo_pendiente: editandoEvento.estado === 'completado' ? 0 : saldoIngresado,
+      estado: editandoEvento.estado,
+      ...(seCompletaAhora ? { fecha_pago: new Date().toISOString().split('T')[0], monto_saldo_cobrado: saldoIngresado } : {})
     }).eq('id', editandoEvento.id)
     setEditandoEvento(null)
     cargarEventos()
@@ -312,7 +363,7 @@ function Alquiler() {
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto del alquiler (Bs.)</label>
-                <input type="number" name="monto_total" value={form.monto_total} onChange={handleChange} placeholder="Ej: 2000" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="number" min="0" name="monto_total" value={form.monto_total} onChange={handleChange} placeholder="Ej: 2000" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
             </div>
 
@@ -346,7 +397,7 @@ function Alquiler() {
               {form.incluye_lavado && (
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Monto del lavado (Bs.)</label>
-                  <input type="number" name="monto_lavado" value={form.monto_lavado} onChange={handleChange} placeholder="Ej: 300" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <input type="number" min="0" name="monto_lavado" value={form.monto_lavado} onChange={handleChange} placeholder="Ej: 300" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
                 </div>
               )}
             </div>
@@ -360,7 +411,7 @@ function Alquiler() {
                 </div>
                 <div>
                   <label className="text-xs text-blue-500 font-medium block mb-1">Adelanto (Bs.)</label>
-                  <input type="number" name="adelanto" value={form.adelanto} onChange={handleChange} placeholder="0" className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+                  <input type="number" min="0" name="adelanto" value={form.adelanto} onChange={handleChange} placeholder="0" className="w-full border border-blue-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
                 </div>
                 <div>
                   <p className="text-xs text-blue-500 font-medium">Saldo</p>
@@ -415,7 +466,7 @@ function Alquiler() {
                         </div>
                         <div className="flex flex-wrap gap-2 justify-end">
                           {e.estado !== 'completado' && Number(e.saldo_pendiente) > 0 && (
-                            <button onClick={() => marcarPagado(e.id)} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Pagado</button>
+                            <button onClick={() => marcarPagado(e)} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Pagado</button>
                           )}
                           <button onClick={() => { setModalGarantia(e); setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' }) }} className="bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-xs font-medium">+ Garantía</button>
                           <button onClick={() => setEditandoEvento({...e, clientes: {...e.clientes}})} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium">Editar</button>
@@ -482,15 +533,15 @@ function Alquiler() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Cajas llevadas</label>
-                  <input type="number" name="cajas_llevadas" value={formGarantia.cajas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <input type="number" min="0" name="cajas_llevadas" value={formGarantia.cajas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Botellas llevadas</label>
-                  <input type="number" name="botellas_llevadas" value={formGarantia.botellas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <input type="number" min="0" name="botellas_llevadas" value={formGarantia.botellas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Monto garantía (Bs.)</label>
-                  <input type="number" name="monto_garantia" value={formGarantia.monto_garantia} onChange={handleChangeGarantia} placeholder="Ej: 500" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <input type="number" min="0" name="monto_garantia" value={formGarantia.monto_garantia} onChange={handleChangeGarantia} placeholder="Ej: 500" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Fecha límite</label>
@@ -560,11 +611,11 @@ function Alquiler() {
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Adelanto (Bs.)</label>
-                <input type="number" name="adelanto" value={editandoEvento.adelanto} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="number" min="0" name="adelanto" value={editandoEvento.adelanto} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Saldo pendiente (Bs.)</label>
-                <input type="number" name="saldo_pendiente" value={editandoEvento.saldo_pendiente} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="number" min="0" name="saldo_pendiente" value={editandoEvento.saldo_pendiente} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <label className="text-sm text-gray-600 block mb-1">Observaciones</label>

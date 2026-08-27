@@ -174,15 +174,15 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" name="cantidad_cajas" value={form.cantidad_cajas} onChange={handleChange} placeholder="Ej: 100" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="cantidad_cajas" value={form.cantidad_cajas} onChange={handleChange} placeholder="Ej: 100" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -243,11 +243,11 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" name="cajas_recibidas" value={formCajas.cajas_recibidas} onChange={handleChangeCajas} placeholder="Ej: 71" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="cajas_recibidas" value={formCajas.cajas_recibidas} onChange={handleChangeCajas} placeholder="Ej: 71" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -304,15 +304,15 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
@@ -347,11 +347,11 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">

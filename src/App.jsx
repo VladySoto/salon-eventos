@@ -3,7 +3,6 @@ import Navbar from './components/Navbar'
 import Dashboard from './pages/dashboard/Dashboard'
 import Cervezas from './pages/cervezas/Cervezas'
 import Alquiler from './pages/alquiler/Alquiler'
-import Garantias from './pages/garantias/Garantias'
 
 document.addEventListener('wheel', function(e) {
   if (document.activeElement.type === 'number') {
@@ -21,7 +20,6 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/cervezas" element={<Cervezas />} />
             <Route path="/alquiler" element={<Alquiler />} />
-            <Route path="/garantias" element={<Garantias />} />
           </Routes>
         </main>
       </div>
