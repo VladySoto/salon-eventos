@@ -3,6 +3,8 @@ import Navbar from './components/Navbar'
 import Dashboard from './pages/dashboard/Dashboard'
 import Cervezas from './pages/cervezas/Cervezas'
 import Alquiler from './pages/alquiler/Alquiler'
+import Inventario from './pages/inventario/Inventario'
+import ActaEvento from './pages/inventario/ActaEvento'
 
 document.addEventListener('wheel', function(e) {
   if (document.activeElement.type === 'number') {
@@ -20,6 +22,8 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/cervezas" element={<Cervezas />} />
             <Route path="/alquiler" element={<Alquiler />} />
+            <Route path="/inventario" element={<Inventario />} />
+            <Route path="/inventario/evento/:eventoId" element={<ActaEvento />} />
           </Routes>
         </main>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../../supabase'
 import Toast from '../../components/Toast'
 
@@ -469,6 +470,7 @@ function Alquiler() {
                             <button onClick={() => marcarPagado(e)} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Pagado</button>
                           )}
                           <button onClick={() => { setModalGarantia(e); setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' }) }} className="bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-xs font-medium">+ Garantía</button>
+                          <Link to={`/inventario/evento/${e.id}`} className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-medium">📋 Inventario</Link>
                           <button onClick={() => setEditandoEvento({...e, clientes: {...e.clientes}})} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium">Editar</button>
                           <button onClick={() => eliminarEvento(e.id)} className="bg-red-50 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium">Eliminar</button>
                         </div>

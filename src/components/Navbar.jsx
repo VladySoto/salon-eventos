@@ -5,11 +5,16 @@ const links = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/cervezas', label: 'Cervezas', icon: '🍺' },
   { to: '/alquiler', label: 'Alquiler', icon: '🏛️' },
+  { to: '/inventario', label: 'Inventario', icon: '📋' },
 ]
 
 function Navbar() {
   const location = useLocation()
   const [menuAbierto, setMenuAbierto] = useState(false)
+
+  function esActivo(to) {
+    return to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
+  }
 
   return (
     <>
@@ -21,7 +26,7 @@ function Navbar() {
             key={link.to}
             to={link.to}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${location.pathname === link.to ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              ${esActivo(link.to) ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
           >
             <span>{link.icon}</span>
             <span>{link.label}</span>
@@ -49,7 +54,7 @@ function Navbar() {
               to={link.to}
               onClick={() => setMenuAbierto(false)}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname === link.to ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                ${esActivo(link.to) ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
             >
               <span>{link.icon}</span>
               <span>{link.label}</span>
@@ -65,7 +70,7 @@ function Navbar() {
             key={link.to}
             to={link.to}
             className={`flex-1 flex flex-col items-center py-2 text-xs font-medium transition-colors
-              ${location.pathname === link.to ? 'text-blue-600' : 'text-gray-400'}`}
+              ${esActivo(link.to) ? 'text-blue-600' : 'text-gray-400'}`}
           >
             <span className="text-xl mb-0.5">{link.icon}</span>
             <span>{link.label}</span>
