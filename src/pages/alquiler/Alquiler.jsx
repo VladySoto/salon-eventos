@@ -141,6 +141,7 @@ function Alquiler() {
       .maybeSingle()
 
     let cliente
+    const clienteCreado = !clienteExistente
     if (clienteExistente) {
       const { data: clienteActualizado, error: errorCliente } = await supabase
         .from('clientes')
@@ -182,6 +183,17 @@ function Alquiler() {
       cargarEventos()
       mostrarToast('Reserva registrada correctamente')
     } else {
+      // Revertir el cliente para no dejar datos huérfanos o modificados sin reserva
+      if (clienteCreado) {
+        await supabase.from('clientes').delete().eq('id', cliente.id)
+      } else {
+        await supabase.from('clientes').update({
+          nombre: clienteExistente.nombre,
+          ci_nit: clienteExistente.ci_nit,
+          telefono: clienteExistente.telefono,
+          telefono2: clienteExistente.telefono2
+        }).eq('id', clienteExistente.id)
+      }
       mostrarToast('Error al registrar la reserva', 'error')
     }
 
