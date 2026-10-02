@@ -109,15 +109,19 @@ function Alquiler() {
 
     const { data: eventosExistentes } = await supabase
       .from('eventos')
-      .select('id, fecha, fecha_fin, clientes(nombre)')
-      .neq('estado', 'completado')
+      .select('id, fecha, fecha_fin, estado, clientes(nombre)')
 
     const fechaInicio = form.fecha
     const fechaFin = form.dos_dias ? form.fecha_fin : form.fecha
 
+    const d = new Date()
+    const hoyLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
     const conflicto = eventosExistentes?.find(e => {
       const eInicio = e.fecha
       const eFin = e.fecha_fin || e.fecha
+      // Un evento pagado antes de realizarse sigue ocupando su fecha; solo se libera cuando ya pasó
+      if (e.estado === 'completado' && eFin < hoyLocal) return false
       return fechaInicio <= eFin && fechaFin >= eInicio
     })
 
