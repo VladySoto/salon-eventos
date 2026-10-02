@@ -142,18 +142,29 @@ function Alquiler() {
 
     let cliente
     const clienteCreado = !clienteExistente
+    let clienteModificado = false
     if (clienteExistente) {
-      const { data: clienteActualizado, error: errorCliente } = await supabase
-        .from('clientes')
-        .update({ nombre: form.nombre, ci_nit: form.ci_nit || clienteExistente.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || clienteExistente.telefono2 })
-        .eq('id', clienteExistente.id)
-        .select().single()
-      if (errorCliente) {
-        mostrarToast('Error al actualizar el cliente', 'error')
-        setLoading(false)
-        return
+      // No se pisan el nombre ni el teléfono guardados; solo se completan datos que estaban vacíos
+      const datosFaltantes = {}
+      if (!clienteExistente.ci_nit && form.ci_nit) datosFaltantes.ci_nit = form.ci_nit
+      if (!clienteExistente.telefono2 && form.telefono2 && form.telefono2 !== clienteExistente.telefono) datosFaltantes.telefono2 = form.telefono2
+
+      if (Object.keys(datosFaltantes).length > 0) {
+        const { data: clienteActualizado, error: errorCliente } = await supabase
+          .from('clientes')
+          .update(datosFaltantes)
+          .eq('id', clienteExistente.id)
+          .select().single()
+        if (errorCliente) {
+          mostrarToast('Error al actualizar el cliente', 'error')
+          setLoading(false)
+          return
+        }
+        cliente = clienteActualizado
+        clienteModificado = true
+      } else {
+        cliente = clienteExistente
       }
-      cliente = clienteActualizado
     } else {
       const { data: clienteNuevo, error: errorCliente } = await supabase
         .from('clientes')
@@ -186,11 +197,9 @@ function Alquiler() {
       // Revertir el cliente para no dejar datos huérfanos o modificados sin reserva
       if (clienteCreado) {
         await supabase.from('clientes').delete().eq('id', cliente.id)
-      } else {
+      } else if (clienteModificado) {
         await supabase.from('clientes').update({
-          nombre: clienteExistente.nombre,
           ci_nit: clienteExistente.ci_nit,
-          telefono: clienteExistente.telefono,
           telefono2: clienteExistente.telefono2
         }).eq('id', clienteExistente.id)
       }
