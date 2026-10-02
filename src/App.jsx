@@ -6,7 +6,7 @@ import Alquiler from './pages/alquiler/Alquiler'
 import Inventario from './pages/inventario/Inventario'
 import ActaEvento from './pages/inventario/ActaEvento'
 
-document.addEventListener('wheel', function(e) {
+document.addEventListener('wheel', function() {
   if (document.activeElement.type === 'number') {
     document.activeElement.blur()
   }

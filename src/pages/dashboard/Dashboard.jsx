@@ -55,18 +55,20 @@ function Dashboard() {
   const [eventoSeleccionado, setEventoSeleccionado] = useState(null)
   const [anio, setAnio] = useState(new Date().getFullYear())
 
-  useEffect(() => { cargarDatos() }, [])
-
-  async function cargarDatos() {
-    const [{ data: comprasData }, { data: cajasData }, { data: eventosData }] = await Promise.all([
+  useEffect(() => {
+    let activo = true
+    Promise.all([
       supabase.from('compras_cerveza').select('*'),
       supabase.from('cajas_vacias').select('*'),
       supabase.from('eventos').select('*, clientes(nombre, telefono, telefono2, ci_nit)')
-    ])
-    if (comprasData) setCompras(comprasData)
-    if (cajasData) setCajas(cajasData)
-    if (eventosData) setEventos(eventosData)
-  }
+    ]).then(([{ data: comprasData }, { data: cajasData }, { data: eventosData }]) => {
+      if (!activo) return
+      if (comprasData) setCompras(comprasData)
+      if (cajasData) setCajas(cajasData)
+      if (eventosData) setEventos(eventosData)
+    })
+    return () => { activo = false }
+  }, [])
 
   const hoy = new Date()
   const hoyStr = hoy.toISOString().split('T')[0]
