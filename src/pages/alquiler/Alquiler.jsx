@@ -44,6 +44,8 @@ function Alquiler() {
     setToast({ mensaje, tipo })
   }
 
+  // Carga inicial: solo al montar
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { cargarEventos(); verificarGarantiasVencidas() }, [])
 
   async function verificarGarantiasVencidas() {

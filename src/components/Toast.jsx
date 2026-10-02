@@ -1,8 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 function Toast({ mensaje, tipo = 'exito', onClose }) {
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
+
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000)
+    const timer = setTimeout(() => onCloseRef.current(), 3000)
     return () => clearTimeout(timer)
   }, [])
 

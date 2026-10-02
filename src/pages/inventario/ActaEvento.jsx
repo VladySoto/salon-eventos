@@ -38,6 +38,8 @@ function ActaEvento() {
     setToast({ mensaje, tipo })
   }
 
+  // Recarga solo cuando cambia el evento
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { cargarDatos() }, [eventoId])
 
   async function cargarDatos() {
