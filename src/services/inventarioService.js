@@ -41,7 +41,7 @@ export async function obtenerDatosActaEvento(eventoId) {
     { data: itemsCatalogo, error: errorItems },
     { data: filasActa, error: errorFilas }
   ] = await Promise.all([
-    supabase.from('eventos').select('id, tipo_evento, fecha, fecha_fin, clientes(nombre)').eq('id', eventoId).single(),
+    supabase.from('eventos').select('id, tipo_evento, fecha, fecha_fin, clientes(nombre, telefono, telefono2)').eq('id', eventoId).single(),
     supabase.from('inventario_items').select('*').eq('activo', true).order('categoria').order('nombre'),
     supabase.from('evento_inventario').select('*, inventario_items(nombre, categoria, precio_unitario)').eq('evento_id', eventoId)
   ])

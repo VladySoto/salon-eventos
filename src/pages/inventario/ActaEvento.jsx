@@ -4,6 +4,7 @@ import Toast from '../../components/Toast'
 import { useConfirmar } from '../../hooks/useConfirmar'
 import { formatearRangoFechas } from '../../utils/fechas'
 import { etiquetaTipoEvento } from '../../constants'
+import { mensajeActaEntrega, enlaceWhatsApp, telefonoParaWhatsApp } from '../../utils/whatsapp'
 import {
   obtenerDatosActaEvento,
   guardarEntregaEvento,
@@ -14,6 +15,15 @@ import {
 } from '../../services/inventarioService'
 
 const ETIQUETA_CATEGORIA = { cocina: 'Cocina', bar: 'Bar' }
+const ORDEN_CATEGORIAS = ['bar', 'cocina']
+
+// Agrupa por categoría (Bar primero, luego Cocina) manteniendo el orden de entrada dentro de cada una
+function agruparPorCategoria(lista, categoriaDe) {
+  const categorias = [...ORDEN_CATEGORIAS, ...lista.map(categoriaDe).filter(c => !ORDEN_CATEGORIAS.includes(c))]
+  return [...new Set(categorias)]
+    .map(categoria => ({ categoria, titulo: ETIQUETA_CATEGORIA[categoria] || categoria, elementos: lista.filter(e => categoriaDe(e) === categoria) }))
+    .filter(g => g.elementos.length > 0)
+}
 
 function ContadorCantidad({ valor, onCambiar, disabled }) {
   return (
@@ -119,6 +129,14 @@ function ActaEvento() {
   const filasEntregadas = filasActa.filter(f => f.cantidad_entregada > 0).map(filaConCalculo)
   const totalCobro = calcularTotalCobro(filasEntregadas)
 
+  // Lo que se muestra en la lista debe ser lo ya guardado: si hay cambios sin guardar, se pide guardar antes
+  const entregaSinGuardar = itemsPorEntrega.some(item => {
+    const guardada = filasActa.find(f => f.item_id === item.id)?.cantidad_entregada || 0
+    return (entregas[item.id] || 0) !== guardada
+  })
+  const gruposParaMensaje = agruparPorCategoria(filasEntregadas, f => f.inventario_items?.categoria)
+    .map(g => ({ titulo: g.titulo, items: g.elementos.map(f => ({ nombre: f.inventario_items?.nombre, cantidad: f.cantidad_entregada })).sort((a, b) => a.nombre.localeCompare(b.nombre)) }))
+
   function filaConExceso(fila) {
     return (Number(fila.cantidad_devuelta) || 0) + (Number(fila.cantidad_rota) || 0) > fila.cantidad_entregada
   }
@@ -216,18 +234,22 @@ function ActaEvento() {
           {itemsPorEntrega.length === 0 ? (
             <p className="text-gray-400 text-sm">No hay ítems activos en el catálogo. Agregalos desde el módulo de Inventario.</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {itemsPorEntrega.map(item => (
-                <div key={item.id} className="flex items-center justify-between border border-gray-100 bg-gray-50 rounded-lg p-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{item.nombre}</p>
-                    <p className="text-xs text-gray-400">{ETIQUETA_CATEGORIA[item.categoria]}</p>
+            <div className="flex flex-col gap-4">
+              {agruparPorCategoria(itemsPorEntrega, i => i.categoria).map(grupo => (
+                <div key={grupo.categoria}>
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">{grupo.titulo}</h3>
+                  <div className="flex flex-col gap-2">
+                    {grupo.elementos.map(item => (
+                      <div key={item.id} className="flex items-center justify-between border border-gray-100 bg-gray-50 rounded-lg p-3">
+                        <p className="text-sm font-medium text-gray-800">{item.nombre}</p>
+                        <ContadorCantidad
+                          valor={entregas[item.id] || 0}
+                          onCambiar={v => cambiarEntrega(item.id, v)}
+                          disabled={actaCerrada}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <ContadorCantidad
-                    valor={entregas[item.id] || 0}
-                    onCambiar={v => cambiarEntrega(item.id, v)}
-                    disabled={actaCerrada}
-                  />
                 </div>
               ))}
             </div>
@@ -236,6 +258,24 @@ function ActaEvento() {
             <button onClick={handleGuardarEntrega} disabled={guardando} className="w-full mt-4 bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {guardando ? 'Guardando...' : 'Guardar entrega'}
             </button>
+          )}
+          {filasEntregadas.length > 0 && (
+            <div className="mt-3">
+              <a
+                href={entregaSinGuardar ? undefined : enlaceWhatsApp(telefonoParaWhatsApp(evento.clientes), mensajeActaEntrega(evento, gruposParaMensaje))}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={entregaSinGuardar}
+                className={`block w-full text-center py-3 rounded-xl text-sm font-medium ${entregaSinGuardar ? 'bg-gray-100 text-gray-400 pointer-events-none' : 'bg-green-600 text-white hover:bg-green-700'}`}
+              >
+                Enviar lista por WhatsApp
+              </a>
+              <p className="text-xs text-gray-400 mt-1 text-center">
+                {entregaSinGuardar
+                  ? 'Guardá la entrega para poder enviar la lista actualizada.'
+                  : telefonoParaWhatsApp(evento.clientes) ? 'Se abre el chat del cliente con la lista ya escrita.' : 'El cliente no tiene celular registrado: elegís el contacto en WhatsApp.'}
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -247,7 +287,10 @@ function ActaEvento() {
             <p className="text-gray-400 text-sm">Todavía no se registró ninguna entrega para este evento.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {filasEntregadas.map(fila => (
+              {agruparPorCategoria(filasEntregadas, f => f.inventario_items?.categoria).map(grupo => (
+                <div key={grupo.categoria} className="flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-gray-600">{grupo.titulo}</h3>
+                  {grupo.elementos.map(fila => (
                 <div key={fila.id} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -274,6 +317,8 @@ function ActaEvento() {
                   <p className="text-xs text-gray-500 pt-2 border-t border-gray-100">
                     Faltante: <span className={`font-medium ${fila.faltante > 0 ? 'text-red-600' : 'text-gray-600'}`}>{fila.faltante}</span>
                   </p>
+                </div>
+                  ))}
                 </div>
               ))}
 

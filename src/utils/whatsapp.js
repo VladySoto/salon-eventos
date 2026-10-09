@@ -15,8 +15,10 @@ export function telefonoParaWhatsApp(cliente) {
 }
 
 // Abre la conversación con el mensaje ya escrito; la persona decide si lo envía
+// Sin teléfono, WhatsApp deja elegir el contacto
 export function enlaceWhatsApp(telefono, mensaje) {
-  return `https://wa.me/${CODIGO_PAIS}${soloDigitos(telefono)}?text=${encodeURIComponent(mensaje)}`
+  const destino = telefono ? `${CODIGO_PAIS}${soloDigitos(telefono)}` : ''
+  return `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`
 }
 
 function nombreCorto(cliente) {
@@ -49,4 +51,14 @@ export function mensajeParaEvento(evento) {
   const garantia = (evento.garantias || []).find(g => g.estado === ESTADOS_GARANTIA.PENDIENTE)
   if (garantia) return mensajeGarantia(evento, garantia)
   return mensajeGeneral(evento)
+}
+
+// grupos: [{ titulo, items: [{ nombre, cantidad }] }]
+export function mensajeActaEntrega(evento, grupos) {
+  const tipo = etiquetaTipoEvento(evento.tipo_evento).toLowerCase()
+  const secciones = grupos
+    .filter(g => g.items.length > 0)
+    .map(g => `*${g.titulo}*\n${g.items.map(i => `• ${i.cantidad} ${i.nombre}`).join('\n')}`)
+    .join('\n\n')
+  return `Hola ${nombreCorto(evento.clientes)}, le enviamos del salón Rey Illampu la lista de lo que se le entregó para su ${tipo} del ${formatearFecha(evento.fecha)}:\n\n${secciones}\n\nLe pedimos devolverlo completo y en buen estado. ¡Gracias!`
 }
