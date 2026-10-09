@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
 import Toast from '../../components/Toast'
-import { fechaLocalISO } from '../../utils/fechas'
+import { fechaLocalISO, formatearFecha } from '../../utils/fechas'
+import { useConfirmar } from '../../hooks/useConfirmar'
+import CampoCantidad from '../../components/CampoCantidad'
+import AvisoCarga from '../../components/AvisoCarga'
 
 function obtenerFechaHoy() {
   return fechaLocalISO()
@@ -26,11 +29,26 @@ function Cervezas() {
   })
   const [editandoCompra, setEditandoCompra] = useState(null)
   const [editandoCaja, setEditandoCaja] = useState(null)
+  const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
+  const [confirmar, dialogoConfirmacion] = useConfirmar()
 
-  useEffect(() => {
-    cargarCompras()
-    cargarCajas()
-  }, [])
+  function cargarInicial() {
+    return Promise.all([cargarCompras(), cargarCajas()]).then(resultados => {
+      setErrorCarga(resultados.includes(false))
+      setCargando(false)
+    })
+  }
+
+  function reintentarCarga() {
+    setCargando(true)
+    setErrorCarga(false)
+    cargarInicial()
+  }
+
+  // Carga inicial: solo al montar
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { cargarInicial() }, [])
 
   const [toast, setToast] = useState(null)
 
@@ -39,13 +57,17 @@ function Cervezas() {
   }
 
   async function cargarCompras() {
-    const { data } = await supabase.from('compras_cerveza').select('*').order('created_at', { ascending: false })
-    if (data) setCompras(data)
+    const { data, error } = await supabase.from('compras_cerveza').select('*').order('created_at', { ascending: false })
+    if (error || !data) return false
+    setCompras(data)
+    return true
   }
 
   async function cargarCajas() {
-    const { data } = await supabase.from('cajas_vacias').select('*').order('created_at', { ascending: false })
-    if (data) setCajas(data)
+    const { data, error } = await supabase.from('cajas_vacias').select('*').order('created_at', { ascending: false })
+    if (error || !data) return false
+    setCajas(data)
+    return true
   }
 
   function handleChange(e) { setForm({ ...form, [e.target.name]: e.target.value }) }
@@ -134,7 +156,7 @@ function Cervezas() {
   }
 
   async function eliminarCompra(id) {
-    if (!confirm('¿Seguro que querés eliminar esta compra?')) return
+    if (!(await confirmar('¿Seguro que querés eliminar esta compra?', { titulo: 'Eliminar compra', textoConfirmar: 'Eliminar' }))) return
     const { error } = await supabase.from('compras_cerveza').delete().eq('id', id)
     if (error) {
       mostrarToast('No se pudo eliminar la compra', 'error')
@@ -145,7 +167,7 @@ function Cervezas() {
   }
 
   async function eliminarCaja(id) {
-    if (!confirm('¿Seguro que querés eliminar este registro?')) return
+    if (!(await confirmar('¿Seguro que querés eliminar este registro?', { titulo: 'Eliminar registro', textoConfirmar: 'Eliminar' }))) return
     const { error } = await supabase.from('cajas_vacias').delete().eq('id', id)
     if (error) {
       mostrarToast('No se pudo eliminar el registro', 'error')
@@ -165,7 +187,9 @@ function Cervezas() {
       <h1 className="text-xl md:text-2xl font-bold text-gray-800">Módulo de Cervezas</h1>
       <p className="text-gray-500 mt-1 mb-4 text-sm">Control de compras, cajas y deudas</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+      <AvisoCarga cargando={cargando} error={errorCarga} onReintentar={reintentarCarga} texto="Cargando compras y cajas..." />
+
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 ${cargando ? 'opacity-40' : ''}`}>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-sm text-red-600 font-medium">Deuda con distribuidor</p>
           <p className="text-2xl font-bold text-red-700">Bs. {totalDeuda.toFixed(2)}</p>
@@ -178,8 +202,8 @@ function Cervezas() {
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        <button onClick={() => setTab('compras')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${tab === 'compras' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Compras al distribuidor</button>
-        <button onClick={() => setTab('cajas')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${tab === 'cajas' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Cajas vacías</button>
+        <button onClick={() => setTab('compras')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'compras' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Compras al distribuidor</button>
+        <button onClick={() => setTab('cajas')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'cajas' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Cajas vacías</button>
       </div>
 
       {tab === 'compras' && (
@@ -189,22 +213,22 @@ function Cervezas() {
             <form onSubmit={handleSubmitCompra} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" min="0" name="cantidad_cajas" value={form.cantidad_cajas} onChange={handleChange} placeholder="Ej: 100" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <CampoCantidad name="cantidad_cajas" value={form.cantidad_cajas} onChange={handleChange} placeholder="Ej: 100" required />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
-                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {loading ? 'Guardando...' : 'Registrar compra'}
                 </button>
               </div>
@@ -213,7 +237,7 @@ function Cervezas() {
 
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <h2 className="text-base font-semibold text-gray-700 mb-4">Historial de compras</h2>
-            {compras.length === 0 ? (
+            {cargando || errorCarga ? null : compras.length === 0 ? (
               <p className="text-gray-400 text-sm">No hay compras registradas.</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -221,18 +245,18 @@ function Cervezas() {
                   <div key={c.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{c.fecha}</p>
-                        <p className="text-xs text-gray-500">{c.cantidad_cajas} cajas — Bs. {Number(c.total).toFixed(2)}</p>
+                        <p className="text-sm font-medium text-gray-800">{formatearFecha(c.fecha)}</p>
+                        <p className="text-sm text-gray-600">{c.cantidad_cajas} cajas — Bs. {Number(c.total).toFixed(2)}</p>
                       </div>
                       <span className={`text-sm font-bold ${Number(c.deuda_pendiente) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                         Deuda: Bs. {Number(c.deuda_pendiente).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <p className="text-xs text-gray-500">Pagado: Bs. {Number(c.monto_pagado).toFixed(2)}</p>
+                      <p className="text-sm text-gray-600">Pagado: Bs. {Number(c.monto_pagado).toFixed(2)}</p>
                       <div className="flex gap-2">
-                        <button onClick={() => setEditandoCompra({...c})} className="text-blue-600 text-xs font-medium bg-blue-50 px-2 py-1 rounded-lg">Editar</button>
-                        <button onClick={() => eliminarCompra(c.id)} className="text-red-500 text-xs font-medium bg-red-50 px-2 py-1 rounded-lg">Eliminar</button>
+                        <button onClick={() => setEditandoCompra({...c})} className="text-blue-600 text-sm font-medium bg-blue-50 px-4 py-3 rounded-xl">Editar</button>
+                        <button onClick={() => eliminarCompra(c.id)} className="text-red-500 text-sm font-medium bg-red-50 px-4 py-3 rounded-xl">Eliminar</button>
                       </div>
                     </div>
                   </div>
@@ -250,11 +274,11 @@ function Cervezas() {
             <form onSubmit={handleSubmitCajas} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={formCajas.fecha} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="date" name="fecha" value={formCajas.fecha} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo</label>
-                <select name="tipo" value={formCajas.tipo} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select name="tipo" value={formCajas.tipo} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
                   <option value="">Seleccioná</option>
                   <option value="debe">Debe (cajas recibidas a devolver)</option>
                   <option value="devolucion">Devolución (cajas que devolví)</option>
@@ -262,14 +286,14 @@ function Cervezas() {
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" min="0" name="cajas_recibidas" value={formCajas.cajas_recibidas} onChange={handleChangeCajas} placeholder="Ej: 71" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <CampoCantidad name="cajas_recibidas" value={formCajas.cajas_recibidas} onChange={handleChangeCajas} placeholder="Ej: 71" required />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
-                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {loading ? 'Guardando...' : 'Registrar movimiento'}
                 </button>
               </div>
@@ -278,7 +302,7 @@ function Cervezas() {
 
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <h2 className="text-base font-semibold text-gray-700 mb-4">Historial de cajas</h2>
-            {cajas.length === 0 ? (
+            {cargando || errorCarga ? null : cajas.length === 0 ? (
               <p className="text-gray-400 text-sm">No hay movimientos registrados.</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -286,18 +310,18 @@ function Cervezas() {
                   <div key={c.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{c.fecha}</p>
-                        <p className="text-xs text-gray-500">{c.cajas_recibidas} cajas</p>
+                        <p className="text-sm font-medium text-gray-800">{formatearFecha(c.fecha)}</p>
+                        <p className="text-sm text-gray-600">{c.cajas_recibidas} cajas</p>
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.tipo === 'debe' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                         {c.tipo === 'debe' ? 'Debe' : 'Devolución'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <p className="text-xs text-gray-500">Monto: Bs. {Number(c.monto || 0).toFixed(2)}</p>
+                      <p className="text-sm text-gray-600">Monto: Bs. {Number(c.monto || 0).toFixed(2)}</p>
                       <div className="flex gap-2">
-                        <button onClick={() => setEditandoCaja({...c})} className="text-blue-600 text-xs font-medium bg-blue-50 px-2 py-1 rounded-lg">Editar</button>
-                        <button onClick={() => eliminarCaja(c.id)} className="text-red-500 text-xs font-medium bg-red-50 px-2 py-1 rounded-lg">Eliminar</button>
+                        <button onClick={() => setEditandoCaja({...c})} className="text-blue-600 text-sm font-medium bg-blue-50 px-4 py-3 rounded-xl">Editar</button>
+                        <button onClick={() => eliminarCaja(c.id)} className="text-red-500 text-sm font-medium bg-red-50 px-4 py-3 rounded-xl">Eliminar</button>
                       </div>
                     </div>
                   </div>
@@ -314,29 +338,29 @@ function Cervezas() {
           <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-800">Editar compra</h3>
-              <button onClick={() => setEditandoCompra(null)} className="text-gray-400 text-xl font-bold">✕</button>
+              <button onClick={() => setEditandoCompra(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={editandoCompra.fecha} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="date" name="fecha" value={editandoCompra.fecha} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" min="0" name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <CampoCantidad name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setEditandoCompra(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium">Cancelar</button>
-              <button onClick={guardarEdicionCompra} disabled={loading} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50">
+              <button onClick={() => setEditandoCompra(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
+              <button onClick={guardarEdicionCompra} disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
                 {loading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
@@ -350,38 +374,39 @@ function Cervezas() {
           <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-800">Editar cajas</h3>
-              <button onClick={() => setEditandoCaja(null)} className="text-gray-400 text-xl font-bold">✕</button>
+              <button onClick={() => setEditandoCaja(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={editandoCaja.fecha} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="date" name="fecha" value={editandoCaja.fecha} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo</label>
-                <select name="tipo" value={editandoCaja.tipo} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select name="tipo" value={editandoCaja.tipo} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
                   <option value="debe">Debe</option>
                   <option value="devolucion">Devolución</option>
                 </select>
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <input type="number" min="0" name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <CampoCantidad name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setEditandoCaja(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium">Cancelar</button>
-              <button onClick={guardarEdicionCaja} disabled={loading} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50">
+              <button onClick={() => setEditandoCaja(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
+              <button onClick={guardarEdicionCaja} disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
                 {loading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
         </div>
       )}
+      {dialogoConfirmacion}
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
   )

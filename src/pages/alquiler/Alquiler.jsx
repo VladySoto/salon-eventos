@@ -4,6 +4,9 @@ import { supabase } from '../../supabase'
 import Toast from '../../components/Toast'
 import { fechaLocalISO, sumarDiasISO, formatearFecha, formatearRangoFechas } from '../../utils/fechas'
 import { TIPOS_EVENTO, etiquetaTipoEvento } from '../../constants'
+import { useConfirmar } from '../../hooks/useConfirmar'
+import CampoCantidad from '../../components/CampoCantidad'
+import AvisoCarga from '../../components/AvisoCarga'
 
 function obtenerFechaLimite() {
   return sumarDiasISO(7)
@@ -17,6 +20,9 @@ function Alquiler() {
   const [editandoEvento, setEditandoEvento] = useState(null)
   const [modalGarantia, setModalGarantia] = useState(null)
   const [toast, setToast] = useState(null)
+  const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
+  const [confirmar, dialogoConfirmacion] = useConfirmar()
   const [formGarantia, setFormGarantia] = useState({
     cajas_llevadas: '',
     botellas_llevadas: '',
@@ -44,10 +50,6 @@ function Alquiler() {
     setToast({ mensaje, tipo })
   }
 
-  // Carga inicial: solo al montar
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { cargarEventos(); verificarGarantiasVencidas() }, [])
-
   async function verificarGarantiasVencidas() {
     const hoy = fechaLocalISO()
     await supabase
@@ -59,15 +61,29 @@ function Alquiler() {
   }
 
   async function cargarEventos() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('eventos')
       .select('*, clientes(id, nombre, ci_nit, telefono, telefono2)')
       .order('fecha', { ascending: true })
-    if (data) {
+    if (error || !data) {
+      setErrorCarga(true)
+    } else {
+      setErrorCarga(false)
       setEventos(data)
       cargarGarantias(data)
     }
+    setCargando(false)
   }
+
+  function reintentarCarga() {
+    setCargando(true)
+    setErrorCarga(false)
+    cargarEventos()
+  }
+
+  // Carga inicial: solo al montar (marca las garantías vencidas y luego carga los eventos)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { verificarGarantiasVencidas() }, [])
 
   async function cargarGarantias(eventosData) {
     const ids = eventosData.map(e => e.id)
@@ -227,19 +243,19 @@ function Alquiler() {
   }
 
   async function eliminarEvento(eventoId) {
-    if (!confirm('¿Seguro que querés eliminar este evento?')) return
+    if (!(await confirmar('¿Seguro que querés eliminar este evento?', { titulo: 'Eliminar evento', textoConfirmar: 'Eliminar' }))) return false
     const evento = eventos.find(e => e.id === eventoId)
 
     const { data: garantiasPrevias, error: errorLeer } = await supabase.from('garantias').select('*').eq('evento_id', eventoId)
     if (errorLeer) {
       mostrarToast('No se pudo eliminar el evento', 'error')
-      return
+      return false
     }
     if (garantiasPrevias.length > 0) {
       const { error: errorGarantias } = await supabase.from('garantias').delete().eq('evento_id', eventoId)
       if (errorGarantias) {
         mostrarToast('No se pudo eliminar el evento', 'error')
-        return
+        return false
       }
     }
 
@@ -249,7 +265,7 @@ function Alquiler() {
       if (garantiasPrevias.length > 0) await supabase.from('garantias').insert(garantiasPrevias)
       cargarEventos()
       mostrarToast('No se pudo eliminar el evento. Puede tener un acta de inventario registrada', 'error')
-      return
+      return false
     }
 
     if (evento?.cliente_id) {
@@ -261,6 +277,7 @@ function Alquiler() {
     }
     cargarEventos()
     mostrarToast('Evento eliminado', 'alerta')
+    return true
   }
 
   async function guardarEdicionEvento() {
@@ -334,7 +351,7 @@ function Alquiler() {
   }
 
   async function eliminarGarantia(id) {
-    if (!confirm('¿Eliminar esta garantía?')) return
+    if (!(await confirmar('¿Eliminar esta garantía?', { titulo: 'Eliminar garantía', textoConfirmar: 'Eliminar' }))) return
     const { error } = await supabase.from('garantias').delete().eq('id', id)
     if (error) {
       mostrarToast('No se pudo eliminar la garantía', 'error')
@@ -370,7 +387,9 @@ function Alquiler() {
       <h1 className="text-xl md:text-2xl font-bold text-gray-800">Módulo de Alquiler</h1>
       <p className="text-gray-500 mt-1 mb-4 text-sm">Reservas y eventos del salón</p>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <AvisoCarga cargando={cargando} error={errorCarga} onReintentar={reintentarCarga} texto="Cargando eventos..." />
+
+      <div className={`grid grid-cols-3 gap-3 mb-4 ${cargando ? 'opacity-40' : ''}`}>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
           <p className="text-xs text-blue-600 font-medium">Próximos</p>
           <p className="text-2xl font-bold text-blue-700">{eventosProximos.length}</p>
@@ -386,8 +405,8 @@ function Alquiler() {
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        <button onClick={() => setTab('reservas')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${tab === 'reservas' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Nueva reserva</button>
-        <button onClick={() => setTab('eventos')} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${tab === 'eventos' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Todos los eventos</button>
+        <button onClick={() => setTab('reservas')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'reservas' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Nueva reserva</button>
+        <button onClick={() => setTab('eventos')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'eventos' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Todos los eventos</button>
       </div>
 
       {tab === 'reservas' && (
@@ -502,7 +521,7 @@ function Alquiler() {
       {tab === 'eventos' && (
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <h2 className="text-base font-semibold text-gray-700 mb-4">Todos los eventos</h2>
-          {eventos.length === 0 ? (
+          {cargando || errorCarga ? null : eventos.length === 0 ? (
             <p className="text-gray-400 text-sm">No hay eventos registrados.</p>
           ) : (
             <div className="flex flex-col gap-4">
@@ -515,31 +534,30 @@ function Alquiler() {
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <p className="font-medium text-gray-800">{e.clientes?.nombre}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{etiquetaTipoEvento(e.tipo_evento)} — {formatearRangoFechas(e.fecha, e.fecha_fin)}</p>
-                          <p className="text-xs text-gray-500">📞 {e.clientes?.telefono}{e.clientes?.telefono2 ? ` / ${e.clientes.telefono2}` : ''}</p>
-                          {e.clientes?.ci_nit && <p className="text-xs text-gray-400">CI: {e.clientes.ci_nit}</p>}
-                          {e.observaciones && <p className="text-xs text-gray-400 mt-1 italic">{e.observaciones}</p>}
+                          <p className="text-sm text-gray-600 mt-0.5">{etiquetaTipoEvento(e.tipo_evento)} — {formatearRangoFechas(e.fecha, e.fecha_fin)}</p>
+                          <p className="text-sm text-gray-600">📞 {e.clientes?.telefono}{e.clientes?.telefono2 ? ` / ${e.clientes.telefono2}` : ''}</p>
+                          {e.clientes?.ci_nit && <p className="text-sm text-gray-500">CI: {e.clientes.ci_nit}</p>}
+                          {e.observaciones && <p className="text-sm text-gray-500 mt-1 italic">{e.observaciones}</p>}
                         </div>
                         <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${e.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                           {e.estado === 'completado' ? '✓ Completado' : '⏳ Reservado'}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-3 border-t border-gray-100">
                         <div>
                           {e.monto_total != null && (
-                            <p className="text-xs text-gray-500">Total: <span className="font-medium text-gray-700">Bs. {(Number(e.monto_total) + Number(e.monto_lavado || 0)).toFixed(2)}</span>{Number(e.monto_lavado) > 0 && <span> (incl. lavado Bs. {Number(e.monto_lavado).toFixed(2)})</span>}</p>
+                            <p className="text-sm text-gray-600">Total: <span className="font-medium text-gray-700">Bs. {(Number(e.monto_total) + Number(e.monto_lavado || 0)).toFixed(2)}</span>{Number(e.monto_lavado) > 0 && <span> (incl. lavado Bs. {Number(e.monto_lavado).toFixed(2)})</span>}</p>
                           )}
-                          <p className="text-xs text-gray-500">Adelanto: <span className="font-medium text-gray-700">Bs. {Number(e.adelanto).toFixed(2)}</span></p>
-                          <p className="text-xs text-gray-500">Saldo: <span className={`font-medium ${Number(e.saldo_pendiente) > 0 ? 'text-yellow-700' : 'text-green-600'}`}>Bs. {Number(e.saldo_pendiente).toFixed(2)}</span></p>
+                          <p className="text-sm text-gray-600">Adelanto: <span className="font-medium text-gray-700">Bs. {Number(e.adelanto).toFixed(2)}</span></p>
+                          <p className="text-sm text-gray-600">Saldo: <span className={`font-medium ${Number(e.saldo_pendiente) > 0 ? 'text-yellow-700' : 'text-green-600'}`}>Bs. {Number(e.saldo_pendiente).toFixed(2)}</span></p>
                         </div>
-                        <div className="flex flex-wrap gap-2 justify-end">
+                        <div className="flex flex-wrap gap-2 sm:justify-end">
                           {e.estado !== 'completado' && Number(e.saldo_pendiente) > 0 && (
-                            <button onClick={() => marcarPagado(e)} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Pagado</button>
+                            <button onClick={() => marcarPagado(e)} className="bg-green-600 text-white px-4 py-3 rounded-xl text-sm font-medium">Pagado</button>
                           )}
-                          <button onClick={() => { setModalGarantia(e); setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' }) }} className="bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-xs font-medium">+ Garantía</button>
-                          <Link to={`/inventario/evento/${e.id}`} className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-medium">📋 Inventario</Link>
-                          <button onClick={() => setEditandoEvento({...e, clientes: {...e.clientes}})} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium">Editar</button>
-                          <button onClick={() => eliminarEvento(e.id)} className="bg-red-50 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium">Eliminar</button>
+                          <button onClick={() => { setModalGarantia(e); setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' }) }} className="bg-purple-50 text-purple-600 px-4 py-3 rounded-xl text-sm font-medium">+ Garantía</button>
+                          <Link to={`/inventario/evento/${e.id}`} className="bg-indigo-50 text-indigo-600 px-4 py-3 rounded-xl text-sm font-medium">📋 Inventario</Link>
+                          <button onClick={() => setEditandoEvento({...e, clientes: {...e.clientes}})} className="bg-blue-50 text-blue-600 px-4 py-3 rounded-xl text-sm font-medium">Editar</button>
                         </div>
                       </div>
                     </div>
@@ -554,24 +572,24 @@ function Alquiler() {
                               <div key={g.id} className={`rounded-lg p-3 border ${g.estado === 'devuelta' ? 'bg-green-50 border-green-200' : g.estado === 'ejecutada' ? 'bg-red-50 border-red-200' : 'bg-white border-orange-200'}`}>
                                 <div className="flex justify-between items-start">
                                   <div>
-                                    <div className="flex gap-2 text-xs text-gray-600">
+                                    <div className="flex gap-3 text-sm text-gray-600">
                                       {g.cajas_llevadas > 0 && <span>📦 {g.cajas_llevadas} cajas</span>}
                                       {g.botellas_llevadas > 0 && <span>🍾 {g.botellas_llevadas} botellas</span>}
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-0.5">Garantía: <span className="font-medium">Bs. {Number(g.monto_garantia).toFixed(2)}</span></p>
-                                    <p className="text-xs text-gray-400">Límite: {formatearFecha(g.fecha_limite)}</p>
-                                    {g.estado === 'pendiente' && <p className={`text-xs font-medium ${dias.color}`}>{dias.texto}</p>}
-                                    {g.observaciones && <p className="text-xs text-gray-400 italic">{g.observaciones}</p>}
+                                    <p className="text-sm text-gray-600 mt-0.5">Garantía: <span className="font-medium">Bs. {Number(g.monto_garantia).toFixed(2)}</span></p>
+                                    <p className="text-sm text-gray-500">Límite: {formatearFecha(g.fecha_limite)}</p>
+                                    {g.estado === 'pendiente' && <p className={`text-sm font-medium ${dias.color}`}>{dias.texto}</p>}
+                                    {g.observaciones && <p className="text-sm text-gray-500 italic">{g.observaciones}</p>}
                                   </div>
                                   <div className="flex flex-col items-end gap-1">
                                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${g.estado === 'devuelta' ? 'bg-green-100 text-green-700' : g.estado === 'ejecutada' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
                                       {g.estado === 'devuelta' ? '✓ Devuelta' : g.estado === 'ejecutada' ? '⚡ Ejecutada' : '⏳ Pendiente'}
                                     </span>
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-2">
                                       {g.estado === 'pendiente' && (
-                                        <button onClick={() => marcarGarantiaDevuelta(g.id)} className="bg-green-600 text-white px-2 py-1 rounded text-xs">✓</button>
+                                        <button onClick={() => marcarGarantiaDevuelta(g.id)} aria-label="Marcar devuelta" className="bg-green-600 text-white w-11 h-11 rounded-lg text-base">✓</button>
                                       )}
-                                      <button onClick={() => eliminarGarantia(g.id)} className="bg-red-50 text-red-500 px-2 py-1 rounded text-xs">✕</button>
+                                      <button onClick={() => eliminarGarantia(g.id)} aria-label="Eliminar garantía" className="bg-red-50 text-red-500 w-11 h-11 rounded-lg text-base">✕</button>
                                     </div>
                                   </div>
                                 </div>
@@ -595,18 +613,18 @@ function Alquiler() {
           <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-1">
               <h3 className="text-lg font-bold text-gray-800">Nueva garantía</h3>
-              <button onClick={() => setModalGarantia(null)} className="text-gray-400 text-xl font-bold">✕</button>
+              <button onClick={() => setModalGarantia(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
             </div>
-            <p className="text-sm text-gray-500 mb-4">Evento: <span className="font-medium text-gray-700">{modalGarantia.clientes?.nombre} — {modalGarantia.fecha}</span></p>
+            <p className="text-sm text-gray-500 mb-4">Evento: <span className="font-medium text-gray-700">{modalGarantia.clientes?.nombre} — {formatearFecha(modalGarantia.fecha)}</span></p>
             <form onSubmit={registrarGarantia} className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Cajas llevadas</label>
-                  <input type="number" min="0" name="cajas_llevadas" value={formGarantia.cajas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <CampoCantidad name="cajas_llevadas" value={formGarantia.cajas_llevadas} onChange={handleChangeGarantia} placeholder="0" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Botellas llevadas</label>
-                  <input type="number" min="0" name="botellas_llevadas" value={formGarantia.botellas_llevadas} onChange={handleChangeGarantia} placeholder="0" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <CampoCantidad name="botellas_llevadas" value={formGarantia.botellas_llevadas} onChange={handleChangeGarantia} placeholder="0" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Monto garantía (Bs.)</label>
@@ -638,7 +656,7 @@ function Alquiler() {
           <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-lg max-h-screen overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-gray-800">Editar evento</h3>
-              <button onClick={() => setEditandoEvento(null)} className="text-gray-400 text-xl font-bold">✕</button>
+              <button onClick={() => setEditandoEvento(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -691,7 +709,14 @@ function Alquiler() {
                 <textarea name="observaciones" value={editandoEvento.observaciones || ''} onChange={handleChangeEditar} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm resize-none" />
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <button
+              type="button"
+              onClick={async () => { if (await eliminarEvento(editandoEvento.id)) setEditandoEvento(null) }}
+              className="w-full mt-6 bg-red-50 text-red-600 py-3 rounded-xl text-sm font-medium"
+            >
+              Eliminar evento
+            </button>
+            <div className="flex gap-3 mt-3">
               <button onClick={() => setEditandoEvento(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
               <button onClick={guardarEdicionEvento} disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
                 {loading ? 'Guardando...' : 'Guardar'}
@@ -701,6 +726,7 @@ function Alquiler() {
         </div>
       )}
 
+      {dialogoConfirmacion}
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
   )

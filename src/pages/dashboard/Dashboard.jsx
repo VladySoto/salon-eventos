@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
 import { fechaLocalISO, inicioMesISO, formatearRangoFechas } from '../../utils/fechas'
 import { etiquetaTipoEvento } from '../../constants'
+import AvisoCarga from '../../components/AvisoCarga'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS_SEMANA = ['L','M','M','J','V','S','D']
@@ -56,6 +57,9 @@ function Dashboard() {
   const [eventos, setEventos] = useState([])
   const [eventoSeleccionado, setEventoSeleccionado] = useState(null)
   const [anio, setAnio] = useState(new Date().getFullYear())
+  const [cargando, setCargando] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
+  const [intento, setIntento] = useState(0)
 
   useEffect(() => {
     let activo = true
@@ -63,14 +67,29 @@ function Dashboard() {
       supabase.from('compras_cerveza').select('*'),
       supabase.from('cajas_vacias').select('*'),
       supabase.from('eventos').select('*, clientes(nombre, telefono, telefono2, ci_nit)')
-    ]).then(([{ data: comprasData }, { data: cajasData }, { data: eventosData }]) => {
+    ]).then(([rCompras, rCajas, rEventos]) => {
       if (!activo) return
-      if (comprasData) setCompras(comprasData)
-      if (cajasData) setCajas(cajasData)
-      if (eventosData) setEventos(eventosData)
+      if (rCompras.error || rCajas.error || rEventos.error) {
+        setErrorCarga(true)
+      } else {
+        setCompras(rCompras.data || [])
+        setCajas(rCajas.data || [])
+        setEventos(rEventos.data || [])
+      }
+      setCargando(false)
+    }).catch(() => {
+      if (!activo) return
+      setErrorCarga(true)
+      setCargando(false)
     })
     return () => { activo = false }
-  }, [])
+  }, [intento])
+
+  function reintentarCarga() {
+    setCargando(true)
+    setErrorCarga(false)
+    setIntento(n => n + 1)
+  }
 
   const hoy = new Date()
   const hoyStr = fechaLocalISO(hoy)
@@ -99,6 +118,16 @@ function Dashboard() {
   function handleClickDia(year, month, day) {
     const evs = obtenerEventosDia(year, month, day)
     if (evs.length > 0) setEventoSeleccionado(evs[0])
+  }
+
+  if (cargando || errorCarga) {
+    return (
+      <div className="p-4 md:p-6">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800">Dashboard</h1>
+        <p className="text-gray-500 mt-1 mb-4 text-sm">Resumen general del negocio</p>
+        <AvisoCarga cargando={cargando} error={errorCarga} onReintentar={reintentarCarga} texto="Cargando resumen..." />
+      </div>
+    )
   }
 
   return (

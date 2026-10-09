@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import Toast from '../../components/Toast'
+import { useConfirmar } from '../../hooks/useConfirmar'
 import { formatearRangoFechas } from '../../utils/fechas'
 import { etiquetaTipoEvento } from '../../constants'
 import {
@@ -17,9 +18,9 @@ const ETIQUETA_CATEGORIA = { cocina: 'Cocina', bar: 'Bar' }
 function ContadorCantidad({ valor, onCambiar, disabled }) {
   return (
     <div className="flex items-center gap-2">
-      <button type="button" disabled={disabled} onClick={() => onCambiar(Math.max(0, (valor || 0) - 1))} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">−</button>
-      <span className="w-6 text-center text-sm font-medium text-gray-800">{valor || 0}</span>
-      <button type="button" disabled={disabled} onClick={() => onCambiar((valor || 0) + 1)} className="w-8 h-8 rounded-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">+</button>
+      <button type="button" disabled={disabled} onClick={() => onCambiar(Math.max(0, (valor || 0) - 1))} className="w-11 h-11 rounded-lg text-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">−</button>
+      <span className="w-8 text-center text-sm font-medium text-gray-800">{valor || 0}</span>
+      <button type="button" disabled={disabled} onClick={() => onCambiar((valor || 0) + 1)} className="w-11 h-11 rounded-lg text-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">+</button>
     </div>
   )
 }
@@ -35,6 +36,7 @@ function ActaEvento() {
   const [retornos, setRetornos] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [toast, setToast] = useState(null)
+  const [confirmar, dialogoConfirmacion] = useConfirmar()
 
   function mostrarToast(mensaje, tipo = 'exito') {
     setToast({ mensaje, tipo })
@@ -137,7 +139,7 @@ function ActaEvento() {
   }
 
   async function handleConfirmarCierre() {
-    if (!confirm('¿Confirmar el retorno y cerrar el acta? Esto va a descontar del inventario las pérdidas y ya no se va a poder editar.')) return
+    if (!(await confirmar('¿Confirmar el retorno y cerrar el acta? Esto va a descontar del inventario las pérdidas y ya no se va a poder editar.', { titulo: 'Cerrar acta', textoConfirmar: 'Cerrar acta', peligro: false }))) return
     setGuardando(true)
     const filas = filasEntregadas.map(f => ({
       id: f.id,
@@ -279,6 +281,7 @@ function ActaEvento() {
         </div>
       )}
 
+      {dialogoConfirmacion}
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
   )
