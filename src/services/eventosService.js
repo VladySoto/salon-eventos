@@ -2,7 +2,7 @@ import { supabase } from '../supabase'
 import { fechaLocalISO, formatearFecha } from '../utils/fechas'
 import { ESTADOS_EVENTO, ESTADOS_GARANTIA } from '../constants'
 import { soloDigitos, telefonosValidos, limpiarParaFiltro, MENSAJE_TELEFONO } from '../utils/validaciones'
-import { calcularMontosReserva, fechaFinEvento, buscarEventoQueOcupa } from '../utils/calculos'
+import { calcularMontosReserva, buscarEventoQueOcupa } from '../utils/calculos'
 
 // Las funciones que guardan devuelven { error: 'mensaje listo para mostrar' } o { error: null }.
 
@@ -12,14 +12,15 @@ const MENSAJE_FECHAS = 'La fecha fin no puede ser anterior a la de inicio'
 const COLUMNAS_EVENTO = 'id, cliente_id, tipo_evento, fecha, fecha_fin, observaciones, adelanto, saldo_pendiente, estado, pagado, fecha_pago, monto_saldo_cobrado, monto_total, incluye_lavado, monto_lavado'
 const COLUMNAS_CLIENTE = 'id, nombre, ci_nit, telefono, telefono2'
 const COLUMNAS_GARANTIA = 'id, cajas_llevadas, botellas_llevadas, monto_garantia, fecha_limite, observaciones, estado'
+const COLUMNAS_PAGO = 'id, monto, fecha, tipo, nota'
 
 // ---------- Lectura ----------
 
-// Trae los eventos con su cliente y sus garantías en una sola consulta
+// Trae los eventos con su cliente, garantías y pagos en una sola consulta
 export async function listarEventos() {
   return supabase
     .from('eventos')
-    .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA})`)
+    .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA}), pagos(${COLUMNAS_PAGO})`)
     .order('fecha', { ascending: true })
 }
 
@@ -27,7 +28,7 @@ export async function listarEventos() {
 export async function obtenerEvento(id) {
   return supabase
     .from('eventos')
-    .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA})`)
+    .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA}), pagos(${COLUMNAS_PAGO})`)
     .eq('id', id)
     .single()
 }
@@ -153,17 +154,19 @@ export async function registrarReserva(form) {
   return { error: null }
 }
 
-export async function marcarEventoPagado(evento) {
+// Cobra todo o parte del saldo. La base de datos guarda el pago y baja el saldo en una sola transacción
+// (función registrar_pago de sql/fase5b_pagos.sql).
+export async function registrarPago(evento, monto, nota) {
   const saldo = Number(evento.saldo_pendiente) || 0
-  const yaRealizado = fechaFinEvento(evento) < fechaLocalISO()
-  const { error } = await supabase.from('eventos').update({
-    saldo_pendiente: 0,
-    pagado: true,
-    fecha_pago: fechaLocalISO(),
-    monto_saldo_cobrado: (Number(evento.monto_saldo_cobrado) || 0) + saldo,
-    ...(yaRealizado ? { estado: ESTADOS_EVENTO.COMPLETADO } : {})
-  }).eq('id', evento.id)
-  return { error: error ? 'No se pudo marcar como pagado' : null }
+  if (!(monto > 0)) return { error: 'El monto debe ser mayor que 0' }
+  if (monto > saldo) return { error: `El monto supera el saldo pendiente (Bs. ${saldo.toFixed(2)})` }
+
+  const { error } = await supabase.rpc('registrar_pago', { p_evento_id: evento.id, p_monto: monto, p_nota: nota || null })
+  if (error) {
+    // Los errores que levanta la función (P0001) ya traen un mensaje listo para mostrar
+    return { error: error.code === 'P0001' ? error.message : 'No se pudo registrar el pago' }
+  }
+  return { error: null }
 }
 
 // `original` es el evento como estaba guardado; `editado` es la copia con los cambios del formulario.
@@ -176,7 +179,6 @@ export async function guardarEdicionEvento(original, editado) {
   const fechaFin = editado.fecha_fin || editado.fecha
   if (fechaFin < fechaInicio) return { error: MENSAJE_FECHAS }
 
-  const saldoAnterior = Number(original?.saldo_pendiente) || 0
   const saldoNuevo = parseFloat(editado.saldo_pendiente) || 0
   if (saldoNuevo < 0 || (parseFloat(editado.adelanto) || 0) < 0) return { error: 'Los montos no pueden ser negativos' }
 
@@ -197,8 +199,8 @@ export async function guardarEdicionEvento(original, editado) {
   }).eq('id', editado.clientes.id)
   if (errorCliente) return { error: 'Error al actualizar el cliente' }
 
-  // Si el saldo pasó de tener deuda a cero, se registra el cobro
-  const seCobra = saldoAnterior > 0 && saldoNuevo === 0
+  // El adelanto lo registra solo la base de datos: si cambia, queda una corrección con la fecha de hoy.
+  // El saldo se baja cobrando con registrarPago(), no editándolo, para que el ingreso quede anotado.
   const { error: errorEvento } = await supabase.from('eventos').update({
     tipo_evento: editado.tipo_evento,
     fecha: editado.fecha,
@@ -207,8 +209,7 @@ export async function guardarEdicionEvento(original, editado) {
     adelanto: parseFloat(editado.adelanto) || 0,
     saldo_pendiente: saldoNuevo,
     pagado: saldoNuevo === 0,
-    estado: editado.estado,
-    ...(seCobra ? { fecha_pago: fechaLocalISO(), monto_saldo_cobrado: (Number(original?.monto_saldo_cobrado) || 0) + saldoAnterior } : {})
+    estado: editado.estado
   }).eq('id', editado.id)
   if (errorEvento) return { error: 'Error al actualizar el evento' }
   return { error: null }

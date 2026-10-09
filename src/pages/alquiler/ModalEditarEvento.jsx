@@ -54,9 +54,15 @@ function ModalEditarEvento({ evento, guardando, onGuardar, onEliminar, onCerrar 
         </Campo>
         <Campo etiqueta="Adelanto (Bs.)">
           <Entrada type="number" min="0" step="0.01" name="adelanto" value={editando.adelanto} onChange={handleChange} />
+          {Number(editando.adelanto) !== Number(evento.adelanto) && (
+            <p className="text-xs text-gray-500 mt-1">El cambio queda registrado como una corrección con la fecha de hoy.</p>
+          )}
         </Campo>
         <Campo etiqueta="Saldo pendiente (Bs.)">
           <Entrada type="number" min="0" step="0.01" name="saldo_pendiente" value={editando.saldo_pendiente} onChange={handleChange} />
+          {Number(editando.saldo_pendiente) < Number(evento.saldo_pendiente) && (
+            <p className="text-xs text-yellow-700 mt-1">Bajaste el saldo. Si el cliente pagó, cancelá y usá el botón 💵 Cobrar de la tarjeta para que cuente como ingreso.</p>
+          )}
         </Campo>
         <Campo etiqueta="Observaciones" className="col-span-1 md:col-span-2">
           <AreaTexto name="observaciones" value={editando.observaciones || ''} onChange={handleChange} rows={2} />

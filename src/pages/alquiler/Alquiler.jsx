@@ -8,7 +8,7 @@ import { ESTADOS_EVENTO } from '../../constants'
 import { filtrarEventos, ordenarEventos, mesesConEventos } from '../../utils/filtrosEventos'
 import {
   registrarReserva,
-  marcarEventoPagado,
+  registrarPago,
   guardarEdicionEvento,
   eliminarEvento,
   registrarGarantia,
@@ -20,6 +20,7 @@ import FormularioReserva from './FormularioReserva'
 import FiltrosEventos from './FiltrosEventos'
 import TarjetaEvento from './TarjetaEvento'
 import ModalGarantia from './ModalGarantia'
+import ModalPago from './ModalPago'
 import ModalEditarEvento from './ModalEditarEvento'
 
 function claseTab(activa) {
@@ -32,6 +33,7 @@ function Alquiler() {
   const [guardando, setGuardando] = useState(false)
   const [eventoEditando, setEventoEditando] = useState(null)
   const [eventoGarantia, setEventoGarantia] = useState(null)
+  const [eventoPago, setEventoPago] = useState(null)
   const [busqueda, setBusqueda] = useState({ texto: '', filtro: 'todos', mes: '' })
   const [toast, setToast] = useState(null)
   const [confirmar, dialogoConfirmacion] = useConfirmar()
@@ -58,12 +60,11 @@ function Alquiler() {
     return terminar(error, 'Reserva registrada correctamente')
   }
 
-  async function handlePagado(evento) {
-    const saldo = Number(evento.saldo_pendiente) || 0
-    const acepta = await confirmar(`¿Marcar el saldo de Bs. ${saldo.toFixed(2)} como pagado?`, { titulo: 'Marcar como pagado', textoConfirmar: 'Sí, pagado', peligro: false })
-    if (!acepta) return
-    const { error } = await marcarEventoPagado(evento)
-    terminar(error, 'Saldo marcado como pagado')
+  async function handleCobrar(monto, nota) {
+    setGuardando(true)
+    const { error } = await registrarPago(eventoPago, monto, nota)
+    setGuardando(false)
+    if (await terminar(error, 'Pago registrado correctamente')) setEventoPago(null)
   }
 
   async function handleGuardarEdicion(editado) {
@@ -75,7 +76,9 @@ function Alquiler() {
   }
 
   async function handleEliminarEvento(evento) {
-    const acepta = await confirmar('¿Seguro que querés eliminar este evento?', { titulo: 'Eliminar evento', textoConfirmar: 'Eliminar' })
+    const cobrado = (evento.pagos || []).reduce((total, p) => total + Number(p.monto), 0)
+    const aviso = cobrado > 0 ? ` Los Bs. ${cobrado.toFixed(2)} cobrados seguirán contando como ingresos en el mes en que se cobraron.` : ''
+    const acepta = await confirmar(`¿Seguro que querés eliminar este evento?${aviso}`, { titulo: 'Eliminar evento', textoConfirmar: 'Eliminar' })
     if (!acepta) return
     const { error } = await eliminarEvento(evento)
     if (error) await recargar() // por si se alcanzó a restaurar algo
@@ -159,7 +162,7 @@ function Alquiler() {
                   key={evento.id}
                   evento={evento}
                   hoy={hoy}
-                  onPagado={handlePagado}
+                  onCobrar={setEventoPago}
                   onGarantia={setEventoGarantia}
                   onEditar={setEventoEditando}
                   onDevolverGarantia={handleDevolverGarantia}
@@ -169,6 +172,16 @@ function Alquiler() {
             </div>
           )}
         </div>
+      )}
+
+      {eventoPago && (
+        <ModalPago
+          key={eventoPago.id}
+          evento={eventoPago}
+          guardando={guardando}
+          onCobrar={handleCobrar}
+          onCerrar={() => setEventoPago(null)}
+        />
       )}
 
       {eventoGarantia && (

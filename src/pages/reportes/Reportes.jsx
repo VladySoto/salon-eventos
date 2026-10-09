@@ -4,8 +4,8 @@ import AvisoCarga from '../../components/AvisoCarga'
 import Boton from '../../components/ui/Boton'
 import { Selector } from '../../components/ui/Campo'
 import { cargarDatosReporte } from '../../services/reportesService'
-import { armarReporte } from '../../utils/reportes'
-import { fechaLocalISO, formatearMes, formatearRangoFechas, mesesRecientes } from '../../utils/fechas'
+import { armarReporte, TEXTO_TIPO_PAGO } from '../../utils/reportes'
+import { fechaLocalISO, formatearFecha, formatearMes, formatearRangoFechas, mesesRecientes } from '../../utils/fechas'
 import { ESTADOS_EVENTO, etiquetaTipoEvento } from '../../constants'
 import { descargarReporteExcel } from './exportarExcel'
 
@@ -109,7 +109,7 @@ function Reportes() {
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             <Tarjeta color="azul" titulo="Eventos del mes" valor={reporte.eventos.cantidad} detalle={`${reporte.eventos.completados} completados · ${reporte.eventos.pagados} pagados`} />
-            <Tarjeta color="morado" titulo="Ingresos del mes" valor={bs(reporte.ingresos.total)} detalle={`Adelantos ${bs(reporte.ingresos.adelantos)} + saldos ${bs(reporte.ingresos.saldosCobrados)}`} />
+            <Tarjeta color="morado" titulo="Ingresos del mes" valor={bs(reporte.ingresos.total)} detalle={`Adelantos ${bs(reporte.ingresos.adelantos)} + saldos ${bs(reporte.ingresos.saldosCobrados)}${reporte.ingresos.correcciones !== 0 ? ` + correcciones ${bs(reporte.ingresos.correcciones)}` : ''}`} />
             <Tarjeta color="gris" titulo="Monto contratado" valor={bs(reporte.eventos.contratado)} detalle={reporte.eventos.sinMonto > 0 ? `${reporte.eventos.sinMonto} evento(s) sin monto registrado` : null} />
             <Tarjeta color="amarillo" titulo="Saldo pendiente" valor={bs(reporte.eventos.saldoPendiente)} detalle="De los eventos del mes" />
             <Tarjeta color="rojo" titulo="Compras de cerveza" valor={bs(reporte.cervezas.totalCompras)} detalle={`${reporte.cervezas.cajasCompradas} cajas · deuda ${bs(reporte.cervezas.deuda)}`} />
@@ -126,6 +126,25 @@ function Reportes() {
               </ul>
             </div>
           )}
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+            <h3 className="text-base font-semibold text-gray-700 mb-3">Pagos cobrados en el mes</h3>
+            {datos.pagos.length === 0 ? (
+              <p className="text-sm text-gray-400">No se registraron pagos en este mes.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {datos.pagos.map(p => (
+                  <div key={p.id} className="flex justify-between items-start gap-3 border border-gray-100 rounded-xl px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{p.descripcion || 'Evento eliminado'}</p>
+                      <p className="text-sm text-gray-500">{formatearFecha(p.fecha)} · {TEXTO_TIPO_PAGO[p.tipo]}{p.nota ? ` · ${p.nota}` : ''}</p>
+                    </div>
+                    <p className={`text-sm font-medium flex-shrink-0 ${Number(p.monto) < 0 ? 'text-red-600' : 'text-green-700'}`}>{bs(p.monto)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
             <h3 className="text-base font-semibold text-gray-700 mb-3">Eventos del mes</h3>
@@ -151,8 +170,7 @@ function Reportes() {
           </div>
 
           <p className="text-xs text-gray-400">
-            Los ingresos se calculan con los adelantos de las reservas hechas en el mes y los saldos cobrados en el mes.
-            Si después se edita o se elimina un evento, este número puede cambiar.
+            Los ingresos suman los pagos cobrados en el mes (adelantos, saldos y correcciones). No cambian si después se edita o se elimina un evento.
           </p>
         </>
       )}

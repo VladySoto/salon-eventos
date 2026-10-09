@@ -3,15 +3,17 @@ import { formatearFecha, formatearMes } from './fechas'
 
 const FORMATO_DINERO = '#,##0.00'
 
+export const TEXTO_TIPO_PAGO = { adelanto: 'Adelanto', saldo: 'Saldo', ajuste: 'Corrección' }
+
 function sumar(lista, campo) {
   return lista.reduce((total, item) => total + (Number(item[campo]) || 0), 0)
 }
 
 // Calcula los números del reporte de un mes ('AAAA-MM') a partir de los datos que trae reportesService.
 //
-// Nota sobre los ingresos: se calculan igual que en el Dashboard, con los adelantos de las reservas
-// hechas en el mes y los saldos cobrados en el mes. Si luego se edita o borra un evento, ese número cambia.
-export function armarReporte({ eventos, compras, cajas, inventario }, mes) {
+// Los ingresos son la suma de los pagos registrados en el mes (tabla pagos): adelantos, saldos
+// cobrados y correcciones. No cambian si después se edita o se borra un evento.
+export function armarReporte({ eventos, pagos, compras, cajas, inventario }, mes) {
   const delMes = eventos.filter(e => e.fecha.slice(0, 7) === mes)
 
   const porTipo = {}
@@ -23,8 +25,9 @@ export function armarReporte({ eventos, compras, cajas, inventario }, mes) {
   const conMonto = delMes.filter(e => e.monto_total != null)
   const contratado = conMonto.reduce((total, e) => total + Number(e.monto_total) + Number(e.monto_lavado || 0), 0)
 
-  const adelantos = sumar(eventos.filter(e => e.created_at?.slice(0, 7) === mes), 'adelanto')
-  const saldosCobrados = sumar(eventos.filter(e => e.fecha_pago?.slice(0, 7) === mes), 'monto_saldo_cobrado')
+  const adelantos = sumar(pagos.filter(p => p.tipo === 'adelanto'), 'monto')
+  const saldosCobrados = sumar(pagos.filter(p => p.tipo === 'saldo'), 'monto')
+  const correcciones = sumar(pagos.filter(p => p.tipo === 'ajuste'), 'monto')
 
   const debe = cajas.filter(c => c.tipo === TIPOS_MOVIMIENTO_CAJAS.DEBE)
   const devoluciones = cajas.filter(c => c.tipo === TIPOS_MOVIMIENTO_CAJAS.DEVOLUCION)
@@ -41,7 +44,7 @@ export function armarReporte({ eventos, compras, cajas, inventario }, mes) {
       sinMonto: delMes.length - conMonto.length,
       saldoPendiente: sumar(delMes.filter(e => Number(e.saldo_pendiente) > 0), 'saldo_pendiente')
     },
-    ingresos: { adelantos, saldosCobrados, total: adelantos + saldosCobrados },
+    ingresos: { adelantos, saldosCobrados, correcciones, total: adelantos + saldosCobrados + correcciones },
     cervezas: {
       compras: compras.length,
       cajasCompradas: sumar(compras, 'cantidad_cajas'),
@@ -64,7 +67,7 @@ const negrita = valor => ({ value: valor, fontWeight: 'bold' })
 const dinero = valor => ({ value: Number(valor) || 0, format: FORMATO_DINERO })
 const encabezado = valor => ({ value: valor, fontWeight: 'bold', backgroundColor: '#dbeafe' })
 
-export function construirHojasExcel(reporte, { eventos, compras, cajas }, mes) {
+export function construirHojasExcel(reporte, { eventos, pagos, compras, cajas }, mes) {
   const e = reporte.eventos
   const delMes = eventos.filter(ev => ev.fecha.slice(0, 7) === mes)
 
@@ -80,8 +83,9 @@ export function construirHojasExcel(reporte, { eventos, compras, cajas }, mes) {
     ...Object.entries(e.porTipo).map(([tipo, cantidad]) => [`  ${tipo}`, cantidad]),
     [],
     [negrita('INGRESOS')],
-    ['Adelantos de reservas hechas en el mes (Bs.)', dinero(reporte.ingresos.adelantos)],
+    ['Adelantos cobrados en el mes (Bs.)', dinero(reporte.ingresos.adelantos)],
     ['Saldos cobrados en el mes (Bs.)', dinero(reporte.ingresos.saldosCobrados)],
+    ['Correcciones de adelantos (Bs.)', dinero(reporte.ingresos.correcciones)],
     [negrita('Total ingresos (Bs.)'), { value: reporte.ingresos.total, format: FORMATO_DINERO, fontWeight: 'bold' }],
     [],
     [negrita('CERVEZAS')],
@@ -114,6 +118,13 @@ export function construirHojasExcel(reporte, { eventos, compras, cajas }, mes) {
     ])
   ]
 
+  const filasPagos = [
+    ['Fecha', 'Evento', 'Tipo', 'Monto (Bs.)', 'Nota'].map(encabezado),
+    ...pagos.map(p => [formatearFecha(p.fecha), p.descripcion || '', TEXTO_TIPO_PAGO[p.tipo] || p.tipo, dinero(p.monto), p.nota || '']),
+    [],
+    [negrita('Total'), '', '', { value: reporte.ingresos.total, format: FORMATO_DINERO, fontWeight: 'bold' }]
+  ]
+
   const filasCervezas = [
     [negrita('Compras al distribuidor')],
     ['Fecha', 'Cajas', 'Precio por caja (Bs.)', 'Total (Bs.)', 'Pagado (Bs.)', 'Deuda (Bs.)'].map(encabezado),
@@ -127,6 +138,7 @@ export function construirHojasExcel(reporte, { eventos, compras, cajas }, mes) {
   return [
     { sheet: 'Resumen', data: resumen, columns: [{ width: 46 }, { width: 16 }] },
     { sheet: 'Eventos', data: filasEventos, columns: [{ width: 12 }, { width: 12 }, { width: 28 }, { width: 14 }, { width: 22 }, { width: 12 }, { width: 9 }, { width: 14 }, { width: 14 }, { width: 14 }] },
+    { sheet: 'Pagos', data: filasPagos, columns: [{ width: 12 }, { width: 44 }, { width: 14 }, { width: 14 }, { width: 28 }] },
     { sheet: 'Cervezas', data: filasCervezas, columns: [{ width: 14 }, { width: 14 }, { width: 20 }, { width: 14 }, { width: 14 }, { width: 14 }] }
   ]
 }

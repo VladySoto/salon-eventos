@@ -13,7 +13,7 @@ import DetalleEvento from './DetalleEvento'
 const CANTIDAD_PROXIMOS = 5
 
 function Dashboard() {
-  const [datos, setDatos] = useState({ deudaDistribuidor: 0, cajasPendientes: 0, eventos: [] })
+  const [datos, setDatos] = useState({ deudaDistribuidor: 0, cajasPendientes: 0, ingresosMes: 0, eventos: [] })
   const [eventosDetalle, setEventosDetalle] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
@@ -55,7 +55,7 @@ function Dashboard() {
     )
   }
 
-  const { deudaDistribuidor, cajasPendientes, eventos } = datos
+  const { deudaDistribuidor, cajasPendientes, ingresosMes, eventos } = datos
   const hoy = fechaLocalISO()
   const mesActual = hoy.slice(0, 7)
   const hayMuchasCajas = cajasPendientes > UMBRAL_CAJAS_PENDIENTES
@@ -64,11 +64,6 @@ function Dashboard() {
   const eventosEsteMes = eventos.filter(e => e.fecha.slice(0, 7) === mesActual && e.estado === ESTADOS_EVENTO.COMPLETADO)
   const saldoPendienteTotal = sumarSaldosPendientes(eventos)
   const eventosHoy = eventos.filter(e => eventoOcupaFecha(e, hoy) && e.estado === ESTADOS_EVENTO.RESERVADO && Number(e.saldo_pendiente) > 0)
-
-  // Ingresos del mes: adelantos de reservas hechas este mes + saldos cobrados este mes
-  const adelantosEsteMes = eventos.filter(e => e.created_at?.slice(0, 7) === mesActual).reduce((acc, e) => acc + Number(e.adelanto), 0)
-  const saldosCobradosEsteMes = eventos.filter(e => e.fecha_pago?.slice(0, 7) === mesActual).reduce((acc, e) => acc + Number(e.monto_saldo_cobrado ?? 0), 0)
-  const gananciasEsteMes = adelantosEsteMes + saldosCobradosEsteMes
 
   function abrirDia(delDia) {
     if (delDia.length > 0) setEventosDetalle(delDia)
@@ -163,7 +158,7 @@ function Dashboard() {
         </div>
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 md:p-4">
           <p className="text-xs text-purple-600 font-medium">Ingresos este mes</p>
-          <p className="text-lg md:text-2xl font-bold text-purple-700">Bs. {gananciasEsteMes.toFixed(2)}</p>
+          <p className="text-lg md:text-2xl font-bold text-purple-700">Bs. {ingresosMes.toFixed(2)}</p>
         </div>
       </div>
 

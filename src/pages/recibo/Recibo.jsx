@@ -5,6 +5,7 @@ import Boton from '../../components/ui/Boton'
 import { obtenerEvento } from '../../services/eventosService'
 import { etiquetaTipoEvento, ESTADOS_GARANTIA } from '../../constants'
 import { fechaLocalISO, formatearFecha, formatearRangoFechas } from '../../utils/fechas'
+import { TEXTO_TIPO_PAGO } from '../../utils/reportes'
 
 const bs = numero => `Bs. ${Number(numero || 0).toFixed(2)}`
 
@@ -57,6 +58,8 @@ function Recibo() {
   const tieneTotal = evento?.monto_total != null
   const total = tieneTotal ? Number(evento.monto_total) + Number(evento.monto_lavado || 0) : null
   const titulo = evento?.pagado ? 'RECIBO DE PAGO' : 'COMPROBANTE DE RESERVA'
+  const pagos = [...(evento?.pagos || [])].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  const cobrado = pagos.reduce((total, p) => total + Number(p.monto), 0)
 
   return (
     <div className="p-4 md:p-6">
@@ -99,9 +102,20 @@ function Recibo() {
                 <Linea etiqueta="Total" valor={bs(total)} negrita />
               </>
             )}
-            <Linea etiqueta="Adelanto recibido" valor={bs(evento.adelanto)} />
-            {evento.pagado && Number(evento.monto_saldo_cobrado) > 0 && (
-              <Linea etiqueta={`Saldo cobrado el ${formatearFecha(evento.fecha_pago)}`} valor={bs(evento.monto_saldo_cobrado)} />
+            {pagos.length > 0 ? (
+              <>
+                <p className="text-xs text-gray-500 mt-2 mb-1">Pagos recibidos</p>
+                {pagos.map(p => (
+                  <Linea
+                    key={p.id}
+                    etiqueta={`${formatearFecha(p.fecha)} — ${TEXTO_TIPO_PAGO[p.tipo]}${p.nota ? ` (${p.nota})` : ''}`}
+                    valor={bs(p.monto)}
+                  />
+                ))}
+                <Linea etiqueta="Total cobrado" valor={bs(cobrado)} negrita />
+              </>
+            ) : (
+              <Linea etiqueta="Adelanto recibido" valor={bs(evento.adelanto)} />
             )}
             <Linea
               etiqueta="Saldo pendiente"

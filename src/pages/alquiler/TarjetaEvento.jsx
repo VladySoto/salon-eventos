@@ -4,10 +4,11 @@ import { formatearRangoFechas } from '../../utils/fechas'
 import { telefonoParaWhatsApp, enlaceWhatsApp, mensajeParaEvento } from '../../utils/whatsapp'
 import GarantiasEvento from './GarantiasEvento'
 
-function TarjetaEvento({ evento: e, hoy, onPagado, onGarantia, onEditar, onDevolverGarantia, onEliminarGarantia }) {
+function TarjetaEvento({ evento: e, hoy, onCobrar, onGarantia, onEditar, onDevolverGarantia, onEliminarGarantia }) {
   const completado = e.estado === ESTADOS_EVENTO.COMPLETADO
   const tieneSaldo = Number(e.saldo_pendiente) > 0
   const telefonoWhatsApp = telefonoParaWhatsApp(e.clientes)
+  const cobrado = (e.pagos || []).reduce((total, p) => total + Number(p.monto), 0)
 
   return (
     <div className={`border rounded-xl overflow-hidden ${completado ? 'border-green-200' : tieneSaldo ? 'border-yellow-200' : 'border-gray-200'}`}>
@@ -33,11 +34,14 @@ function TarjetaEvento({ evento: e, hoy, onPagado, onGarantia, onEditar, onDevol
               <p className="text-sm text-gray-600">Total: <span className="font-medium text-gray-700">Bs. {(Number(e.monto_total) + Number(e.monto_lavado || 0)).toFixed(2)}</span>{Number(e.monto_lavado) > 0 && <span> (incl. lavado Bs. {Number(e.monto_lavado).toFixed(2)})</span>}</p>
             )}
             <p className="text-sm text-gray-600">Adelanto: <span className="font-medium text-gray-700">Bs. {Number(e.adelanto).toFixed(2)}</span></p>
+            {(e.pagos || []).length > 0 && (
+              <p className="text-sm text-gray-600">Cobrado: <span className="font-medium text-gray-700">Bs. {cobrado.toFixed(2)}</span></p>
+            )}
             <p className="text-sm text-gray-600">Saldo: <span className={`font-medium ${tieneSaldo ? 'text-yellow-700' : 'text-green-600'}`}>Bs. {Number(e.saldo_pendiente).toFixed(2)}</span></p>
           </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
             {tieneSaldo && (
-              <button onClick={() => onPagado(e)} className="bg-green-600 text-white px-4 py-3 rounded-xl text-sm font-medium">Pagado</button>
+              <button onClick={() => onCobrar(e)} className="bg-green-600 text-white px-4 py-3 rounded-xl text-sm font-medium">💵 Cobrar</button>
             )}
             <button onClick={() => onGarantia(e)} className="bg-purple-50 text-purple-600 px-4 py-3 rounded-xl text-sm font-medium">+ Garantía</button>
             {telefonoWhatsApp && (
