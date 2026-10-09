@@ -11,6 +11,8 @@ const Cervezas = lazy(() => import('./pages/cervezas/Cervezas'))
 const Alquiler = lazy(() => import('./pages/alquiler/Alquiler'))
 const Inventario = lazy(() => import('./pages/inventario/Inventario'))
 const ActaEvento = lazy(() => import('./pages/inventario/ActaEvento'))
+const Recibo = lazy(() => import('./pages/recibo/Recibo'))
+const Reportes = lazy(() => import('./pages/reportes/Reportes'))
 
 document.addEventListener('wheel', function() {
   if (document.activeElement.type === 'number') {
@@ -30,6 +32,8 @@ function Pantallas() {
           <Route path="/alquiler" element={<Alquiler />} />
           <Route path="/inventario" element={<Inventario />} />
           <Route path="/inventario/evento/:eventoId" element={<ActaEvento />} />
+          <Route path="/recibo/:eventoId" element={<Recibo />} />
+          <Route path="/reportes" element={<Reportes />} />
         </Routes>
       </Suspense>
     </ErrorBoundary>

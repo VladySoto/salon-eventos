@@ -7,6 +7,7 @@ import { fechaLocalISO, formatearRangoFechas } from '../../utils/fechas'
 import { UMBRAL_CAJAS_PENDIENTES, ESTADOS_EVENTO, etiquetaTipoEvento } from '../../constants'
 import { esEventoProximo, eventoOcupaFecha, sumarSaldosPendientes } from '../../utils/calculos'
 import Calendario from './Calendario'
+import PanelSemana from './PanelSemana'
 import DetalleEvento from './DetalleEvento'
 
 const CANTIDAD_PROXIMOS = 5
@@ -108,6 +109,8 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      <PanelSemana eventos={eventos} hoy={hoy} />
 
       <Calendario eventos={eventos} onSeleccionarDia={abrirDia} />
 

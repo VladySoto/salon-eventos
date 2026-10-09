@@ -19,7 +19,7 @@ function AvisoSinConexion() {
   if (enLinea) return null
 
   return (
-    <div role="status" className="bg-yellow-500 text-white text-sm font-medium text-center px-4 py-2">
+    <div role="status" className="print:hidden bg-yellow-500 text-white text-sm font-medium text-center px-4 py-2">
       Sin conexión — no se puede guardar ni cargar información hasta que vuelva internet
     </div>
   )

@@ -34,6 +34,22 @@ export function eventoOcupaFecha(evento, fecha) {
   return fecha >= evento.fecha && fecha <= fechaFinEvento(evento)
 }
 
+// Un evento completado que ya pasó libera su fecha; los demás la siguen ocupando
+// (incluso uno pagado por adelantado que todavía no se realizó).
+export function eventoBloqueaFecha(evento, hoy) {
+  return !(evento.estado === ESTADOS_EVENTO.COMPLETADO && fechaFinEvento(evento) < hoy)
+}
+
+// Busca un evento que ocupe alguna de las fechas del rango (AAAA-MM-DD)
+export function buscarEventoQueOcupa(eventos, fechaInicio, fechaFin, hoy, excluirId = null) {
+  return eventos.find(ev => (
+    ev.id !== excluirId &&
+    eventoBloqueaFecha(ev, hoy) &&
+    fechaInicio <= fechaFinEvento(ev) &&
+    fechaFin >= ev.fecha
+  ))
+}
+
 export function sumarSaldosPendientes(eventos) {
   return eventos.reduce((total, e) => total + (Number(e.saldo_pendiente) > 0 ? Number(e.saldo_pendiente) : 0), 0)
 }

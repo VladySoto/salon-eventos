@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { TIPOS_EVENTO } from '../../constants'
-import { calcularMontosReserva } from '../../utils/calculos'
+import { calcularMontosReserva, buscarEventoQueOcupa } from '../../utils/calculos'
+import { fechaLocalISO, formatearRangoFechas } from '../../utils/fechas'
 import Campo, { Entrada, Selector, AreaTexto } from '../../components/ui/Campo'
 import Boton from '../../components/ui/Boton'
+import ModalDisponibilidad from './ModalDisponibilidad'
 
 function formVacio() {
   return {
@@ -22,14 +24,27 @@ function formVacio() {
   }
 }
 
-// onRegistrar(form) debe devolver true si la reserva se guardó (entonces se limpia el formulario)
-function FormularioReserva({ onRegistrar, guardando }) {
+// eventos: los ya registrados, para avisar al instante si la fecha está ocupada.
+// onRegistrar(form) debe devolver true si la reserva se guardó (entonces se limpia el formulario).
+function FormularioReserva({ eventos, onRegistrar, guardando }) {
   const [form, setForm] = useState(formVacio)
+  const [verDisponibilidad, setVerDisponibilidad] = useState(false)
   const { montoLavado, montoTotal, saldo } = calcularMontosReserva(form)
+
+  const fechaFin = form.dos_dias && form.fecha_fin ? form.fecha_fin : form.fecha
+  const ocupadoPor = form.fecha && fechaFin >= form.fecha
+    ? buscarEventoQueOcupa(eventos, form.fecha, fechaFin, fechaLocalISO())
+    : null
 
   function handleChange(e) {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value
     setForm({ ...form, [e.target.name]: value })
+  }
+
+  function elegirFecha(fecha) {
+    const finInvalido = form.fecha_fin && form.fecha_fin < fecha
+    setForm({ ...form, fecha, fecha_fin: finInvalido ? '' : form.fecha_fin })
+    setVerDisponibilidad(false)
   }
 
   async function handleSubmit(e) {
@@ -74,7 +89,12 @@ function FormularioReserva({ onRegistrar, guardando }) {
         </div>
 
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Fecha del evento</p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-sm font-medium text-gray-700">Fecha del evento</p>
+            <button type="button" onClick={() => setVerDisponibilidad(true)} className="text-sm font-medium text-blue-600 bg-blue-50 px-4 py-3 rounded-xl whitespace-nowrap">
+              📅 Ver fechas libres
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Campo etiqueta="Fecha inicio">
               <Entrada type="date" name="fecha" value={form.fecha} onChange={handleChange} required className="bg-white" />
@@ -91,6 +111,15 @@ function FormularioReserva({ onRegistrar, guardando }) {
               )}
             </div>
           </div>
+          {form.fecha && (
+            ocupadoPor ? (
+              <p role="alert" className="text-sm text-red-600 mt-3">
+                ❌ Fecha ocupada — evento de {ocupadoPor.clientes?.nombre} ({formatearRangoFechas(ocupadoPor.fecha, ocupadoPor.fecha_fin)})
+              </p>
+            ) : (
+              <p className="text-sm text-green-700 mt-3">✓ Fecha libre</p>
+            )
+          )}
         </div>
 
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
@@ -131,6 +160,15 @@ function FormularioReserva({ onRegistrar, guardando }) {
 
         <Boton type="submit" cargando={guardando} className="w-full px-6">Registrar reserva</Boton>
       </form>
+
+      {verDisponibilidad && (
+        <ModalDisponibilidad
+          eventos={eventos}
+          fechaActual={form.fecha}
+          onElegir={elegirFecha}
+          onCerrar={() => setVerDisponibilidad(false)}
+        />
+      )}
     </div>
   )
 }

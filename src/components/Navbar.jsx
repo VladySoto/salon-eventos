@@ -5,6 +5,7 @@ const links = [
   { to: '/cervezas', label: 'Cervezas', icon: '🍺' },
   { to: '/alquiler', label: 'Alquiler', icon: '🏛️' },
   { to: '/inventario', label: 'Inventario', icon: '📋' },
+  { to: '/reportes', label: 'Reportes', icon: '📈' },
 ]
 
 function Navbar() {
@@ -17,7 +18,7 @@ function Navbar() {
   return (
     <>
       {/* Navbar desktop */}
-      <nav className="bg-white border-b border-gray-200 px-4 py-3 hidden md:flex items-center gap-2">
+      <nav className="bg-white border-b border-gray-200 px-4 py-3 hidden md:flex items-center gap-2 print:hidden">
         <span className="font-bold text-gray-800 mr-4 text-sm">Salón de Eventos</span>
         {links.map(link => (
           <Link
@@ -33,12 +34,12 @@ function Navbar() {
       </nav>
 
       {/* Barra superior mobile: solo el título; la navegación está abajo */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3 flex md:hidden items-center">
+      <header className="bg-white border-b border-gray-200 px-4 py-3 flex md:hidden items-center print:hidden">
         <span className="font-bold text-gray-800 text-sm">Salón de Eventos</span>
       </header>
 
       {/* Navegación inferior mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40 pb-[env(safe-area-inset-bottom)] print:hidden">
         {links.map(link => (
           <Link
             key={link.to}

@@ -5,6 +5,7 @@ import { useConfirmar } from '../../hooks/useConfirmar'
 import { fechaLocalISO } from '../../utils/fechas'
 import { esEventoProximo, sumarSaldosPendientes } from '../../utils/calculos'
 import { ESTADOS_EVENTO } from '../../constants'
+import { filtrarEventos, ordenarEventos, mesesConEventos } from '../../utils/filtrosEventos'
 import {
   registrarReserva,
   marcarEventoPagado,
@@ -16,6 +17,7 @@ import {
 } from '../../services/eventosService'
 import { useEventos } from './useEventos'
 import FormularioReserva from './FormularioReserva'
+import FiltrosEventos from './FiltrosEventos'
 import TarjetaEvento from './TarjetaEvento'
 import ModalGarantia from './ModalGarantia'
 import ModalEditarEvento from './ModalEditarEvento'
@@ -30,6 +32,7 @@ function Alquiler() {
   const [guardando, setGuardando] = useState(false)
   const [eventoEditando, setEventoEditando] = useState(null)
   const [eventoGarantia, setEventoGarantia] = useState(null)
+  const [busqueda, setBusqueda] = useState({ texto: '', filtro: 'todos', mes: '' })
   const [toast, setToast] = useState(null)
   const [confirmar, dialogoConfirmacion] = useConfirmar()
 
@@ -102,6 +105,7 @@ function Alquiler() {
   const eventosProximos = eventos.filter(e => esEventoProximo(e, hoy))
   const eventosCompletados = eventos.filter(e => e.estado === ESTADOS_EVENTO.COMPLETADO)
   const totalSaldoPendiente = sumarSaldosPendientes(eventos)
+  const eventosVisibles = ordenarEventos(filtrarEventos(eventos, busqueda, hoy), hoy)
 
   return (
     <div className="p-4 md:p-6">
@@ -130,16 +134,27 @@ function Alquiler() {
         <button onClick={() => setTab('eventos')} className={claseTab(tab === 'eventos')}>Todos los eventos</button>
       </div>
 
-      {tab === 'reservas' && <FormularioReserva onRegistrar={handleRegistrarReserva} guardando={guardando} />}
+      {tab === 'reservas' && <FormularioReserva eventos={eventos} onRegistrar={handleRegistrarReserva} guardando={guardando} />}
 
       {tab === 'eventos' && (
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <h2 className="text-base font-semibold text-gray-700 mb-4">Todos los eventos</h2>
+          {!cargando && !errorCarga && eventos.length > 0 && (
+            <FiltrosEventos
+              busqueda={busqueda}
+              onCambiar={cambios => setBusqueda({ ...busqueda, ...cambios })}
+              meses={mesesConEventos(eventos)}
+              total={eventos.length}
+              mostrados={eventosVisibles.length}
+            />
+          )}
           {cargando || errorCarga ? null : eventos.length === 0 ? (
             <p className="text-gray-400 text-sm">No hay eventos registrados.</p>
+          ) : eventosVisibles.length === 0 ? (
+            <p className="text-gray-400 text-sm">Ningún evento coincide con la búsqueda.</p>
           ) : (
             <div className="flex flex-col gap-4">
-              {eventos.map(evento => (
+              {eventosVisibles.map(evento => (
                 <TarjetaEvento
                   key={evento.id}
                   evento={evento}

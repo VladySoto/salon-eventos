@@ -1,25 +1,9 @@
 import { useState } from 'react'
 import { ESTADOS_EVENTO } from '../../constants'
 import { eventoOcupaFecha } from '../../utils/calculos'
-import { fechaLocalISO } from '../../utils/fechas'
+import { fechaLocalISO, aFechaISO, diasDelMes, MESES } from '../../utils/fechas'
 
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
-
-function aFechaISO(anio, mes, dia) {
-  return `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
-}
-
-// Lista de días del mes empezando en lunes (null = casillas vacías al comienzo)
-function diasDelMes(anio, mes) {
-  const dias = []
-  const primerDia = new Date(anio, mes, 1).getDay()
-  const vacias = primerDia === 0 ? 6 : primerDia - 1
-  const total = new Date(anio, mes + 1, 0).getDate()
-  for (let i = 0; i < vacias; i++) dias.push(null)
-  for (let i = 1; i <= total; i++) dias.push(i)
-  return dias
-}
 
 // Casilla de un día. En el celular mide 40 px para poder tocarla; en pantallas grandes es pequeña.
 const TAMANO_DIA = 'w-10 h-10 text-sm md:w-[18px] md:h-[18px] md:text-[10px]'

@@ -2,7 +2,7 @@ import { supabase } from '../supabase'
 import { fechaLocalISO, formatearFecha } from '../utils/fechas'
 import { ESTADOS_EVENTO, ESTADOS_GARANTIA } from '../constants'
 import { soloDigitos, telefonosValidos, limpiarParaFiltro, MENSAJE_TELEFONO } from '../utils/validaciones'
-import { calcularMontosReserva, fechaFinEvento } from '../utils/calculos'
+import { calcularMontosReserva, fechaFinEvento, buscarEventoQueOcupa } from '../utils/calculos'
 
 // Las funciones que guardan devuelven { error: 'mensaje listo para mostrar' } o { error: null }.
 
@@ -21,6 +21,15 @@ export async function listarEventos() {
     .from('eventos')
     .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA})`)
     .order('fecha', { ascending: true })
+}
+
+// Un solo evento con su cliente y garantías (para el recibo)
+export async function obtenerEvento(id) {
+  return supabase
+    .from('eventos')
+    .select(`${COLUMNAS_EVENTO}, clientes(${COLUMNAS_CLIENTE}), garantias(${COLUMNAS_GARANTIA})`)
+    .eq('id', id)
+    .single()
 }
 
 // Pone al día lo que depende de la fecha: garantías vencidas pasan a "ejecutada" y los
@@ -48,13 +57,7 @@ async function buscarConflicto(fechaInicio, fechaFin, excluirId = null) {
     .select('id, fecha, fecha_fin, estado, clientes(nombre)')
   if (error || !existentes) return { error: error || new Error('sin datos') }
 
-  const hoy = fechaLocalISO()
-  const conflicto = existentes.find(ev => {
-    if (ev.id === excluirId) return false
-    const fin = fechaFinEvento(ev)
-    if (ev.estado === ESTADOS_EVENTO.COMPLETADO && fin < hoy) return false
-    return fechaInicio <= fin && fechaFin >= ev.fecha
-  })
+  const conflicto = buscarEventoQueOcupa(existentes, fechaInicio, fechaFin, fechaLocalISO(), excluirId)
   return { conflicto }
 }
 

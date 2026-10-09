@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 import { ESTADOS_EVENTO, etiquetaTipoEvento } from '../../constants'
 import { formatearRangoFechas } from '../../utils/fechas'
+import { telefonoParaWhatsApp, enlaceWhatsApp, mensajeParaEvento } from '../../utils/whatsapp'
 import GarantiasEvento from './GarantiasEvento'
 
 function TarjetaEvento({ evento: e, hoy, onPagado, onGarantia, onEditar, onDevolverGarantia, onEliminarGarantia }) {
   const completado = e.estado === ESTADOS_EVENTO.COMPLETADO
   const tieneSaldo = Number(e.saldo_pendiente) > 0
+  const telefonoWhatsApp = telefonoParaWhatsApp(e.clientes)
 
   return (
     <div className={`border rounded-xl overflow-hidden ${completado ? 'border-green-200' : tieneSaldo ? 'border-yellow-200' : 'border-gray-200'}`}>
@@ -38,6 +40,17 @@ function TarjetaEvento({ evento: e, hoy, onPagado, onGarantia, onEditar, onDevol
               <button onClick={() => onPagado(e)} className="bg-green-600 text-white px-4 py-3 rounded-xl text-sm font-medium">Pagado</button>
             )}
             <button onClick={() => onGarantia(e)} className="bg-purple-50 text-purple-600 px-4 py-3 rounded-xl text-sm font-medium">+ Garantía</button>
+            {telefonoWhatsApp && (
+              <a
+                href={enlaceWhatsApp(telefonoWhatsApp, mensajeParaEvento(e))}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-medium"
+              >
+                📲 WhatsApp
+              </a>
+            )}
+            <Link to={`/recibo/${e.id}`} className="bg-gray-100 text-gray-700 px-4 py-3 rounded-xl text-sm font-medium">🧾 Recibo</Link>
             <Link to={`/inventario/evento/${e.id}`} className="bg-indigo-50 text-indigo-600 px-4 py-3 rounded-xl text-sm font-medium">📋 Inventario</Link>
             <button onClick={() => onEditar(e)} className="bg-blue-50 text-blue-600 px-4 py-3 rounded-xl text-sm font-medium">Editar</button>
           </div>

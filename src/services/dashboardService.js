@@ -7,7 +7,7 @@ const COLUMNAS_EVENTO = 'id, tipo_evento, fecha, fecha_fin, observaciones, adela
 export async function cargarDatosDashboard() {
   const [resumen, eventos] = await Promise.all([
     supabase.from('resumen_cerveza').select('deuda_distribuidor, cajas_pendientes').single(),
-    supabase.from('eventos').select(`${COLUMNAS_EVENTO}, clientes(nombre, telefono, telefono2, ci_nit)`).order('fecha', { ascending: true })
+    supabase.from('eventos').select(`${COLUMNAS_EVENTO}, clientes(nombre, telefono, telefono2, ci_nit), garantias(id, estado, fecha_limite, monto_garantia, cajas_llevadas, botellas_llevadas)`).order('fecha', { ascending: true })
   ])
   if (resumen.error || eventos.error) return { error: true }
   return {
