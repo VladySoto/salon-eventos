@@ -204,7 +204,7 @@ function Inventario() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-600 block mb-1">Precio unitario (Bs.)</label>
-                  <input type="number" min="0" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="0" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                  <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="0" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
                 </div>
               </div>
               {modalItem.id && (

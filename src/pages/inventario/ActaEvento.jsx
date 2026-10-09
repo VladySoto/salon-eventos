@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import Toast from '../../components/Toast'
+import { formatearRangoFechas } from '../../utils/fechas'
+import { etiquetaTipoEvento } from '../../constants'
 import {
   obtenerDatosActaEvento,
   guardarEntregaEvento,
@@ -178,7 +180,7 @@ function ActaEvento() {
       <Link to="/alquiler" className="text-sm text-blue-600 font-medium">‹ Volver a Alquiler</Link>
       <h1 className="text-xl md:text-2xl font-bold text-gray-800 mt-2">Acta de inventario</h1>
       <p className="text-gray-500 mt-1 mb-4 text-sm">
-        {evento.clientes?.nombre} — {evento.tipo_evento} — {evento.fecha}{evento.fecha_fin ? ` al ${evento.fecha_fin}` : ''}
+        {evento.clientes?.nombre} — {etiquetaTipoEvento(evento.tipo_evento)} — {formatearRangoFechas(evento.fecha, evento.fecha_fin)}
       </p>
 
       {actaCerrada && (

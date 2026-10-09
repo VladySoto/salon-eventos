@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
 import Toast from '../../components/Toast'
+import { fechaLocalISO } from '../../utils/fechas'
 
 function obtenerFechaHoy() {
-  return new Date().toISOString().split('T')[0]
+  return fechaLocalISO()
 }
 
 function Cervezas() {
@@ -99,9 +100,14 @@ function Cervezas() {
     const pagado = parseFloat(editandoCompra.monto_pagado) || 0
     const total = cantidad * precio
     const deuda = total - pagado
-    await supabase.from('compras_cerveza').update({
+    const { error } = await supabase.from('compras_cerveza').update({
       fecha: editandoCompra.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
     }).eq('id', editandoCompra.id)
+    if (error) {
+      mostrarToast('Error al actualizar la compra', 'error')
+      setLoading(false)
+      return
+    }
     setEditandoCompra(null)
     cargarCompras()
     mostrarToast('Compra actualizada correctamente')
@@ -113,9 +119,14 @@ function Cervezas() {
     const recibidas = parseInt(editandoCaja.cajas_recibidas)
     const devueltas = editandoCaja.tipo === 'devolucion' ? recibidas : 0
     const pendientes = editandoCaja.tipo === 'debe' ? recibidas : 0
-    await supabase.from('cajas_vacias').update({
+    const { error } = await supabase.from('cajas_vacias').update({
       fecha: editandoCaja.fecha, tipo: editandoCaja.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(editandoCaja.monto) || 0
     }).eq('id', editandoCaja.id)
+    if (error) {
+      mostrarToast('Error al actualizar el registro', 'error')
+      setLoading(false)
+      return
+    }
     setEditandoCaja(null)
     cargarCajas()
     mostrarToast('Registro actualizado correctamente')
@@ -124,16 +135,24 @@ function Cervezas() {
 
   async function eliminarCompra(id) {
     if (!confirm('¿Seguro que querés eliminar esta compra?')) return
-    await supabase.from('compras_cerveza').delete().eq('id', id)
-cargarCompras()
-mostrarToast('Compra eliminada', 'alerta')
+    const { error } = await supabase.from('compras_cerveza').delete().eq('id', id)
+    if (error) {
+      mostrarToast('No se pudo eliminar la compra', 'error')
+      return
+    }
+    cargarCompras()
+    mostrarToast('Compra eliminada', 'alerta')
   }
 
   async function eliminarCaja(id) {
     if (!confirm('¿Seguro que querés eliminar este registro?')) return
-    await supabase.from('cajas_vacias').delete().eq('id', id)
-cargarCajas()
-mostrarToast('Registro eliminado', 'alerta')
+    const { error } = await supabase.from('cajas_vacias').delete().eq('id', id)
+    if (error) {
+      mostrarToast('No se pudo eliminar el registro', 'error')
+      return
+    }
+    cargarCajas()
+    mostrarToast('Registro eliminado', 'alerta')
   }
 
   const totalDeuda = compras.reduce((acc, c) => acc + Number(c.deuda_pendiente), 0)
@@ -178,11 +197,11 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -247,7 +266,7 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="col-span-1 md:col-span-2">
                 <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -308,11 +327,11 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
@@ -351,7 +370,7 @@ mostrarToast('Registro eliminado', 'alerta')
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input type="number" min="0" step="0.01" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">

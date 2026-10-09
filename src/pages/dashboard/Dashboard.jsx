@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
+import { fechaLocalISO, inicioMesISO, formatearRangoFechas } from '../../utils/fechas'
+import { etiquetaTipoEvento } from '../../constants'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS_SEMANA = ['L','M','M','J','V','S','D']
@@ -71,8 +73,8 @@ function Dashboard() {
   }, [])
 
   const hoy = new Date()
-  const hoyStr = hoy.toISOString().split('T')[0]
-  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+  const hoyStr = fechaLocalISO(hoy)
+  const inicioMes = inicioMesISO(hoy)
 
   const deudaDistribuidor = compras.reduce((acc, c) => acc + Number(c.deuda_pendiente), 0)
   const totalDebe = cajas.filter(c => c.tipo === 'debe').reduce((acc, c) => acc + Number(c.cajas_recibidas), 0)
@@ -237,8 +239,8 @@ function Dashboard() {
               {eventoSeleccionado.clientes?.telefono2 && (
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Teléfono 2</span><span className="text-sm text-gray-800">{eventoSeleccionado.clientes.telefono2}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Tipo</span><span className="text-sm text-gray-800">{eventoSeleccionado.tipo_evento}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha</span><span className="text-sm text-gray-800">{eventoSeleccionado.fecha}{eventoSeleccionado.fecha_fin ? ` al ${eventoSeleccionado.fecha_fin}` : ''}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-gray-500">Tipo</span><span className="text-sm text-gray-800">{etiquetaTipoEvento(eventoSeleccionado.tipo_evento)}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha</span><span className="text-sm text-gray-800">{formatearRangoFechas(eventoSeleccionado.fecha, eventoSeleccionado.fecha_fin)}</span></div>
               <div className="flex justify-between"><span className="text-sm text-gray-500">Adelanto</span><span className="text-sm text-gray-800">Bs. {Number(eventoSeleccionado.adelanto).toFixed(2)}</span></div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-500">Saldo</span>
