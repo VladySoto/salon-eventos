@@ -25,12 +25,26 @@ function agruparPorCategoria(lista, categoriaDe) {
     .filter(g => g.elementos.length > 0)
 }
 
-function ContadorCantidad({ valor, onCambiar, disabled }) {
+// Botones − y + para el dedo, y también se puede escribir el número (solo enteros)
+function ContadorCantidad({ valor, onCambiar, disabled, etiqueta }) {
+  const actual = Number(valor) || 0
+  const clasesBoton = 'w-11 h-11 flex-shrink-0 rounded-lg text-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40 active:bg-gray-200'
   return (
     <div className="flex items-center gap-2">
-      <button type="button" disabled={disabled} onClick={() => onCambiar(Math.max(0, (valor || 0) - 1))} className="w-11 h-11 rounded-lg text-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">−</button>
-      <span className="w-8 text-center text-sm font-medium text-gray-800">{valor || 0}</span>
-      <button type="button" disabled={disabled} onClick={() => onCambiar((valor || 0) + 1)} className="w-11 h-11 rounded-lg text-lg bg-gray-100 text-gray-600 font-bold disabled:opacity-40">+</button>
+      <button type="button" aria-label="Restar uno" disabled={disabled || actual <= 0} onClick={() => onCambiar(actual - 1)} className={clasesBoton}>−</button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        aria-label={etiqueta ? `Cantidad de ${etiqueta}` : 'Cantidad'}
+        placeholder="0"
+        disabled={disabled}
+        value={actual === 0 ? '' : actual}
+        onChange={e => onCambiar(parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
+        onFocus={e => e.target.select()}
+        className="w-16 h-11 border border-gray-300 rounded-lg text-sm text-center font-medium text-gray-800 disabled:bg-gray-100"
+      />
+      <button type="button" aria-label="Sumar uno" disabled={disabled} onClick={() => onCambiar(actual + 1)} className={clasesBoton}>+</button>
     </div>
   )
 }
@@ -243,6 +257,7 @@ function ActaEvento() {
                       <div key={item.id} className="flex items-center justify-between border border-gray-100 bg-gray-50 rounded-lg p-3">
                         <p className="text-sm font-medium text-gray-800">{item.nombre}</p>
                         <ContadorCantidad
+                          etiqueta={item.nombre}
                           valor={entregas[item.id] || 0}
                           onCambiar={v => cambiarEntrega(item.id, v)}
                           disabled={actaCerrada}
