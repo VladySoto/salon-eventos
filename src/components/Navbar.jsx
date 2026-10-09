@@ -38,7 +38,7 @@ function Navbar() {
       </header>
 
       {/* Navegación inferior mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40 pb-[env(safe-area-inset-bottom)]">
         {links.map(link => (
           <Link
             key={link.to}

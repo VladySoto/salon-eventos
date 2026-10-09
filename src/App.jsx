@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import AvisoSinConexion from './components/AvisoSinConexion'
 import Dashboard from './pages/dashboard/Dashboard'
 import Cervezas from './pages/cervezas/Cervezas'
 import Alquiler from './pages/alquiler/Alquiler'
@@ -16,6 +17,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
+        <AvisoSinConexion />
         <Navbar />
         <main className="max-w-5xl mx-auto pb-20 md:pb-0">
           <Routes>
