@@ -1,17 +1,40 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import AvisoSinConexion from './components/AvisoSinConexion'
-import Dashboard from './pages/dashboard/Dashboard'
-import Cervezas from './pages/cervezas/Cervezas'
-import Alquiler from './pages/alquiler/Alquiler'
-import Inventario from './pages/inventario/Inventario'
-import ActaEvento from './pages/inventario/ActaEvento'
+import AvisoCarga from './components/AvisoCarga'
+import ErrorBoundary from './components/ErrorBoundary'
+
+// Cada pantalla se descarga solo cuando se entra por primera vez
+const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'))
+const Cervezas = lazy(() => import('./pages/cervezas/Cervezas'))
+const Alquiler = lazy(() => import('./pages/alquiler/Alquiler'))
+const Inventario = lazy(() => import('./pages/inventario/Inventario'))
+const ActaEvento = lazy(() => import('./pages/inventario/ActaEvento'))
 
 document.addEventListener('wheel', function() {
   if (document.activeElement.type === 'number') {
     document.activeElement.blur()
   }
 }, { passive: false })
+
+function Pantallas() {
+  const location = useLocation()
+  return (
+    // key: al cambiar de pantalla se reinicia el aviso de error
+    <ErrorBoundary key={location.pathname}>
+      <Suspense fallback={<div className="p-4 md:p-6"><AvisoCarga cargando texto="Cargando..." /></div>}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/cervezas" element={<Cervezas />} />
+          <Route path="/alquiler" element={<Alquiler />} />
+          <Route path="/inventario" element={<Inventario />} />
+          <Route path="/inventario/evento/:eventoId" element={<ActaEvento />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
 
 function App() {
   return (
@@ -20,13 +43,7 @@ function App() {
         <AvisoSinConexion />
         <Navbar />
         <main className="max-w-5xl mx-auto pb-20 md:pb-0">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/cervezas" element={<Cervezas />} />
-            <Route path="/alquiler" element={<Alquiler />} />
-            <Route path="/inventario" element={<Inventario />} />
-            <Route path="/inventario/evento/:eventoId" element={<ActaEvento />} />
-          </Routes>
+          <Pantallas />
         </main>
       </div>
     </BrowserRouter>

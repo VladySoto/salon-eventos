@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import Toast from '../../components/Toast'
 import { useConfirmar } from '../../hooks/useConfirmar'
 import CampoCantidad from '../../components/CampoCantidad'
+import Modal from '../../components/ui/Modal'
+import Campo, { Entrada, Selector } from '../../components/ui/Campo'
+import Boton from '../../components/ui/Boton'
 import AvisoCarga from '../../components/AvisoCarga'
 import {
   CATEGORIAS_INVENTARIO,
@@ -198,50 +201,37 @@ function Inventario() {
         </div>
       )}
 
-      {/* Modal alta/edición de ítem */}
       {modalItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end md:items-center justify-center z-50" onClick={() => setModalItem(null)}>
-          <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">{modalItem.id ? 'Editar ítem' : 'Nuevo ítem'}</h3>
-              <button onClick={() => setModalItem(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
+        <Modal titulo={modalItem.id ? 'Editar ítem' : 'Nuevo ítem'} onCerrar={() => setModalItem(null)}>
+          <form onSubmit={guardarItem} className="flex flex-col gap-4">
+            <Campo etiqueta="Nombre">
+              <Entrada type="text" name="nombre" value={form.nombre} onChange={handleChange} placeholder="Ej: Copa de vidrio" required />
+            </Campo>
+            <Campo etiqueta="Categoría">
+              <Selector name="categoria" value={form.categoria} onChange={handleChange}>
+                {CATEGORIAS_INVENTARIO.map(c => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
+              </Selector>
+            </Campo>
+            <div className="grid grid-cols-2 gap-4">
+              <Campo etiqueta={`Cantidad ${modalItem.id ? 'actual' : 'inicial'}`}>
+                <CampoCantidad name="cantidad_actual" value={form.cantidad_actual} onChange={handleChange} placeholder="0" required />
+              </Campo>
+              <Campo etiqueta="Precio unitario (Bs.)">
+                <Entrada type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="0" required />
+              </Campo>
             </div>
-            <form onSubmit={guardarItem} className="flex flex-col gap-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Nombre</label>
-                <input type="text" name="nombre" value={form.nombre} onChange={handleChange} placeholder="Ej: Copa de vidrio" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+            {modalItem.id && (
+              <div className="flex items-center gap-3">
+                <input type="checkbox" name="activo" id="activo" checked={form.activo} onChange={handleChange} className="w-4 h-4 accent-blue-600" />
+                <label htmlFor="activo" className="text-sm font-medium text-gray-700">Activo</label>
               </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Categoría</label>
-                <select name="categoria" value={form.categoria} onChange={handleChange} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
-                  {CATEGORIAS_INVENTARIO.map(c => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Cantidad {modalItem.id ? 'actual' : 'inicial'}</label>
-                  <CampoCantidad name="cantidad_actual" value={form.cantidad_actual} onChange={handleChange} placeholder="0" required />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 block mb-1">Precio unitario (Bs.)</label>
-                  <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="0" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-                </div>
-              </div>
-              {modalItem.id && (
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" name="activo" id="activo" checked={form.activo} onChange={handleChange} className="w-4 h-4 accent-blue-600" />
-                  <label htmlFor="activo" className="text-sm font-medium text-gray-700">Activo</label>
-                </div>
-              )}
-              <div className="flex gap-3 mt-2">
-                <button type="button" onClick={() => setModalItem(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
-                <button type="submit" disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
-                  {loading ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            )}
+            <div className="flex gap-3 mt-2">
+              <Boton variante="secundario" onClick={() => setModalItem(null)} className="flex-1">Cancelar</Boton>
+              <Boton type="submit" cargando={loading} className="flex-1">Guardar</Boton>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {dialogoConfirmacion}

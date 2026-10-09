@@ -20,12 +20,19 @@ self.addEventListener('install', evento => {
     const cache = await caches.open(CACHE)
     await cache.addAll(ARCHIVOS_BASE)
 
-    // Precarga también los JS/CSS que usa el index.html, para que la 2.ª visita ya funcione sin internet
+    // Precarga los JS/CSS que usa el index.html y también las pantallas que se cargan bajo demanda
+    // (sus nombres aparecen dentro del JS principal), para que la app abra completa sin internet.
     try {
       const respuesta = await fetch('/', { cache: 'reload' })
       const html = await respuesta.text()
-      const recursos = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(m => m[1])
-      await Promise.all(recursos.map(url => cache.add(url).catch(() => {})))
+      const recursos = new Set([...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(m => m[1]))
+
+      for (const url of [...recursos].filter(u => u.endsWith('.js'))) {
+        const codigo = await (await fetch(url)).text()
+        for (const m of codigo.matchAll(/assets\/[\w.-]+\.(?:js|css)/g)) recursos.add('/' + m[0])
+      }
+
+      await Promise.all([...recursos].map(url => cache.add(url).catch(() => {})))
     } catch {
       // Si falla, los archivos se guardan igual la primera vez que se usen
     }

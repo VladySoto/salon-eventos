@@ -1,80 +1,96 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../supabase'
 import Toast from '../../components/Toast'
-import { fechaLocalISO, formatearFecha } from '../../utils/fechas'
-import { useConfirmar } from '../../hooks/useConfirmar'
-import CampoCantidad from '../../components/CampoCantidad'
 import AvisoCarga from '../../components/AvisoCarga'
+import CampoCantidad from '../../components/CampoCantidad'
+import Modal from '../../components/ui/Modal'
+import Campo, { Entrada, Selector } from '../../components/ui/Campo'
+import Boton from '../../components/ui/Boton'
+import { useConfirmar } from '../../hooks/useConfirmar'
+import { fechaLocalISO, formatearFecha } from '../../utils/fechas'
+import { TIPOS_MOVIMIENTO_CAJAS, UMBRAL_CAJAS_PENDIENTES, LIMITE_HISTORIAL } from '../../constants'
+import {
+  cargarDatosCervezas,
+  registrarCompra,
+  actualizarCompra,
+  eliminarCompra,
+  registrarMovimientoCajas,
+  actualizarMovimientoCajas,
+  eliminarMovimientoCajas
+} from '../../services/cervezasService'
 
-function obtenerFechaHoy() {
-  return fechaLocalISO()
+function formCompraVacio() {
+  return { fecha: fechaLocalISO(), cantidad_cajas: '', precio_unitario: '', monto_pagado: '' }
 }
 
-function validarCompra({ cantidad, precio, pagado }) {
-  if (!Number.isInteger(cantidad) || cantidad <= 0) return 'La cantidad de cajas debe ser mayor que 0'
-  if (!(precio >= 0)) return 'Ingresá un precio válido'
-  if (pagado < 0) return 'El monto pagado no puede ser negativo'
-  if (pagado > cantidad * precio) return `El monto pagado no puede superar el total (Bs. ${(cantidad * precio).toFixed(2)})`
-  return null
+function formCajasVacio() {
+  return { fecha: fechaLocalISO(), tipo: '', cajas_recibidas: '', monto: '' }
+}
+
+function claseTab(activa) {
+  return `px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${activa ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`
 }
 
 function Cervezas() {
   const [compras, setCompras] = useState([])
   const [cajas, setCajas] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [resumen, setResumen] = useState({ deuda: 0, cajasPendientes: 0 })
+  const [guardando, setGuardando] = useState(false)
   const [tab, setTab] = useState('compras')
-  const [form, setForm] = useState({
-    fecha: obtenerFechaHoy(),
-    cantidad_cajas: '',
-    precio_unitario: '',
-    monto_pagado: ''
-  })
-  const [formCajas, setFormCajas] = useState({
-    fecha: obtenerFechaHoy(),
-    tipo: '',
-    cajas_recibidas: '',
-    monto: ''
-  })
+  const [form, setForm] = useState(formCompraVacio)
+  const [formCajas, setFormCajas] = useState(formCajasVacio)
   const [editandoCompra, setEditandoCompra] = useState(null)
   const [editandoCaja, setEditandoCaja] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
+  const [intento, setIntento] = useState(0)
+  const [toast, setToast] = useState(null)
   const [confirmar, dialogoConfirmacion] = useConfirmar()
 
-  function cargarInicial() {
-    return Promise.all([cargarCompras(), cargarCajas()]).then(resultados => {
-      setErrorCarga(resultados.includes(false))
+  function mostrarToast(mensaje, tipo = 'exito') {
+    setToast({ mensaje, tipo })
+  }
+
+  function aplicarDatos(resultado) {
+    setCompras(resultado.compras)
+    setCajas(resultado.cajas)
+    setResumen(resultado.resumen)
+  }
+
+  // Recarga después de guardar algo
+  async function cargarDatos() {
+    const resultado = await cargarDatosCervezas()
+    if (!resultado.error) aplicarDatos(resultado)
+  }
+
+  useEffect(() => {
+    let activo = true
+    cargarDatosCervezas().then(resultado => {
+      if (!activo) return
+      if (resultado.error) {
+        setErrorCarga(true)
+      } else {
+        setErrorCarga(false)
+        aplicarDatos(resultado)
+      }
       setCargando(false)
     })
-  }
+    return () => { activo = false }
+  }, [intento])
 
   function reintentarCarga() {
     setCargando(true)
     setErrorCarga(false)
-    cargarInicial()
+    setIntento(n => n + 1)
   }
 
-  // Carga inicial: solo al montar
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { cargarInicial() }, [])
-
-  const [toast, setToast] = useState(null)
-
-  function mostrarToast(mensaje, tipo = 'exito') {
-  setToast({ mensaje, tipo })
-  }
-
-  async function cargarCompras() {
-    const { data, error } = await supabase.from('compras_cerveza').select('*').order('created_at', { ascending: false })
-    if (error || !data) return false
-    setCompras(data)
-    return true
-  }
-
-  async function cargarCajas() {
-    const { data, error } = await supabase.from('cajas_vacias').select('*').order('created_at', { ascending: false })
-    if (error || !data) return false
-    setCajas(data)
+  // Muestra el error si lo hubo; si no, recarga los datos y muestra el aviso de éxito.
+  async function terminar(error, mensajeExito, tipoExito = 'exito') {
+    if (error) {
+      mostrarToast(error, 'error')
+      return false
+    }
+    await cargarDatos()
+    mostrarToast(mensajeExito, tipoExito)
     return true
   }
 
@@ -85,132 +101,47 @@ function Cervezas() {
 
   async function handleSubmitCompra(e) {
     e.preventDefault()
-    setLoading(true)
-    const cantidad = parseInt(form.cantidad_cajas)
-    const precio = parseFloat(form.precio_unitario)
-    const pagado = parseFloat(form.monto_pagado) || 0
-    const total = cantidad * precio
-    const deuda = total - pagado
-    const mensajeError = validarCompra({ cantidad, precio, pagado })
-    if (mensajeError) {
-      mostrarToast(mensajeError, 'error')
-      setLoading(false)
-      return
-    }
-    const { error } = await supabase.from('compras_cerveza').insert({
-      fecha: form.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
-    })
-    if (!error) {
-  setForm({ fecha: obtenerFechaHoy(), cantidad_cajas: '', precio_unitario: '', monto_pagado: '' })
-  cargarCompras()
-  mostrarToast('Compra registrada correctamente')
-} else {
-  mostrarToast('Error al registrar la compra', 'error')
-}
-    setLoading(false)
+    setGuardando(true)
+    const { error } = await registrarCompra(form)
+    setGuardando(false)
+    if (await terminar(error, 'Compra registrada correctamente')) setForm(formCompraVacio())
   }
 
   async function handleSubmitCajas(e) {
     e.preventDefault()
-    setLoading(true)
-    const recibidas = parseInt(formCajas.cajas_recibidas)
-    const devueltas = formCajas.tipo === 'devolucion' ? recibidas : 0
-    const pendientes = formCajas.tipo === 'debe' ? recibidas : 0
-    if (!(recibidas > 0)) {
-      mostrarToast('La cantidad de cajas debe ser mayor que 0', 'error')
-      setLoading(false)
-      return
-    }
-    const { error } = await supabase.from('cajas_vacias').insert({
-      fecha: formCajas.fecha, tipo: formCajas.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(formCajas.monto) || 0
-    })
-    if (!error) {
-  setFormCajas({ fecha: obtenerFechaHoy(), tipo: '', cajas_recibidas: '', monto: '' })
-  cargarCajas()
-  mostrarToast('Movimiento de cajas registrado')
-} else {
-  mostrarToast('Error al registrar', 'error')
-}
-    setLoading(false)
+    setGuardando(true)
+    const { error } = await registrarMovimientoCajas(formCajas)
+    setGuardando(false)
+    if (await terminar(error, 'Movimiento de cajas registrado')) setFormCajas(formCajasVacio())
   }
 
   async function guardarEdicionCompra() {
-    setLoading(true)
-    const cantidad = parseInt(editandoCompra.cantidad_cajas)
-    const precio = parseFloat(editandoCompra.precio_unitario)
-    const pagado = parseFloat(editandoCompra.monto_pagado) || 0
-    const total = cantidad * precio
-    const deuda = total - pagado
-    const mensajeError = validarCompra({ cantidad, precio, pagado })
-    if (mensajeError) {
-      mostrarToast(mensajeError, 'error')
-      setLoading(false)
-      return
-    }
-    const { error } = await supabase.from('compras_cerveza').update({
-      fecha: editandoCompra.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
-    }).eq('id', editandoCompra.id)
-    if (error) {
-      mostrarToast('Error al actualizar la compra', 'error')
-      setLoading(false)
-      return
-    }
-    setEditandoCompra(null)
-    cargarCompras()
-    mostrarToast('Compra actualizada correctamente')
-    setLoading(false)
+    setGuardando(true)
+    const { error } = await actualizarCompra(editandoCompra)
+    setGuardando(false)
+    if (await terminar(error, 'Compra actualizada correctamente')) setEditandoCompra(null)
   }
 
   async function guardarEdicionCaja() {
-    setLoading(true)
-    const recibidas = parseInt(editandoCaja.cajas_recibidas)
-    const devueltas = editandoCaja.tipo === 'devolucion' ? recibidas : 0
-    const pendientes = editandoCaja.tipo === 'debe' ? recibidas : 0
-    if (!(recibidas > 0)) {
-      mostrarToast('La cantidad de cajas debe ser mayor que 0', 'error')
-      setLoading(false)
-      return
-    }
-    const { error } = await supabase.from('cajas_vacias').update({
-      fecha: editandoCaja.fecha, tipo: editandoCaja.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(editandoCaja.monto) || 0
-    }).eq('id', editandoCaja.id)
-    if (error) {
-      mostrarToast('Error al actualizar el registro', 'error')
-      setLoading(false)
-      return
-    }
-    setEditandoCaja(null)
-    cargarCajas()
-    mostrarToast('Registro actualizado correctamente')
-    setLoading(false)
+    setGuardando(true)
+    const { error } = await actualizarMovimientoCajas(editandoCaja)
+    setGuardando(false)
+    if (await terminar(error, 'Registro actualizado correctamente')) setEditandoCaja(null)
   }
 
-  async function eliminarCompra(id) {
+  async function handleEliminarCompra(id) {
     if (!(await confirmar('¿Seguro que querés eliminar esta compra?', { titulo: 'Eliminar compra', textoConfirmar: 'Eliminar' }))) return
-    const { error } = await supabase.from('compras_cerveza').delete().eq('id', id)
-    if (error) {
-      mostrarToast('No se pudo eliminar la compra', 'error')
-      return
-    }
-    cargarCompras()
-    mostrarToast('Compra eliminada', 'alerta')
+    const { error } = await eliminarCompra(id)
+    terminar(error, 'Compra eliminada', 'alerta')
   }
 
-  async function eliminarCaja(id) {
+  async function handleEliminarCaja(id) {
     if (!(await confirmar('¿Seguro que querés eliminar este registro?', { titulo: 'Eliminar registro', textoConfirmar: 'Eliminar' }))) return
-    const { error } = await supabase.from('cajas_vacias').delete().eq('id', id)
-    if (error) {
-      mostrarToast('No se pudo eliminar el registro', 'error')
-      return
-    }
-    cargarCajas()
-    mostrarToast('Registro eliminado', 'alerta')
+    const { error } = await eliminarMovimientoCajas(id)
+    terminar(error, 'Registro eliminado', 'alerta')
   }
 
-  const totalDeuda = compras.reduce((acc, c) => acc + Number(c.deuda_pendiente), 0)
-  const totalDebe = cajas.filter(c => c.tipo === 'debe').reduce((acc, c) => acc + Number(c.cajas_recibidas), 0)
-  const totalDevuelto = cajas.filter(c => c.tipo === 'devolucion').reduce((acc, c) => acc + Number(c.cajas_recibidas), 0)
-  const totalCajasPendientes = totalDebe - totalDevuelto
+  const hayMuchasCajas = resumen.cajasPendientes > UMBRAL_CAJAS_PENDIENTES
 
   return (
     <div className="p-4 md:p-6">
@@ -222,18 +153,18 @@ function Cervezas() {
       <div className={`grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 ${cargando ? 'opacity-40' : ''}`}>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-sm text-red-600 font-medium">Deuda con distribuidor</p>
-          <p className="text-2xl font-bold text-red-700">Bs. {totalDeuda.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-red-700">Bs. {resumen.deuda.toFixed(2)}</p>
         </div>
-        <div className={`border rounded-xl p-4 ${totalCajasPendientes > 100 ? 'bg-orange-50 border-orange-200' : 'bg-yellow-50 border-yellow-200'}`}>
-          <p className={`text-sm font-medium ${totalCajasPendientes > 100 ? 'text-orange-600' : 'text-yellow-600'}`}>Cajas vacías pendientes</p>
-          <p className={`text-2xl font-bold ${totalCajasPendientes > 100 ? 'text-orange-700' : 'text-yellow-700'}`}>{totalCajasPendientes} cajas</p>
-          {totalCajasPendientes > 100 && <p className="text-xs text-orange-500 mt-1">⚠️ Muchas cajas pendientes</p>}
+        <div className={`border rounded-xl p-4 ${hayMuchasCajas ? 'bg-orange-50 border-orange-200' : 'bg-yellow-50 border-yellow-200'}`}>
+          <p className={`text-sm font-medium ${hayMuchasCajas ? 'text-orange-600' : 'text-yellow-600'}`}>Cajas vacías pendientes</p>
+          <p className={`text-2xl font-bold ${hayMuchasCajas ? 'text-orange-700' : 'text-yellow-700'}`}>{resumen.cajasPendientes} cajas</p>
+          {hayMuchasCajas && <p className="text-xs text-orange-500 mt-1">⚠️ Muchas cajas pendientes</p>}
         </div>
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
-        <button onClick={() => setTab('compras')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'compras' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Compras al distribuidor</button>
-        <button onClick={() => setTab('cajas')} className={`px-4 py-3 rounded-xl text-sm font-medium whitespace-nowrap ${tab === 'cajas' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>Cajas vacías</button>
+        <button onClick={() => setTab('compras')} className={claseTab(tab === 'compras')}>Compras al distribuidor</button>
+        <button onClick={() => setTab('cajas')} className={claseTab(tab === 'cajas')}>Cajas vacías</button>
       </div>
 
       {tab === 'compras' && (
@@ -241,26 +172,20 @@ function Cervezas() {
           <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
             <h2 className="text-base font-semibold text-gray-700 mb-4">Registrar nueva compra</h2>
             <form onSubmit={handleSubmitCompra} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={form.fecha} onChange={handleChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
+              <Campo etiqueta="Fecha">
+                <Entrada type="date" name="fecha" value={form.fecha} onChange={handleChange} required />
+              </Campo>
+              <Campo etiqueta="Cantidad de cajas">
                 <CampoCantidad name="cantidad_cajas" value={form.cantidad_cajas} onChange={handleChange} placeholder="Ej: 100" required />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
+              </Campo>
+              <Campo etiqueta="Precio por caja (Bs.)">
+                <Entrada type="number" min="0" step="0.01" name="precio_unitario" value={form.precio_unitario} onChange={handleChange} placeholder="Ej: 120" required />
+              </Campo>
+              <Campo etiqueta="Monto pagado (Bs.)">
+                <Entrada type="number" min="0" step="0.01" name="monto_pagado" value={form.monto_pagado} onChange={handleChange} placeholder="0 si es todo a deuda" />
+              </Campo>
               <div className="col-span-1 md:col-span-2">
-                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {loading ? 'Guardando...' : 'Registrar compra'}
-                </button>
+                <Boton type="submit" cargando={guardando} className="w-full md:w-auto px-6">Registrar compra</Boton>
               </div>
             </form>
           </div>
@@ -285,12 +210,15 @@ function Cervezas() {
                     <div className="flex justify-between items-center">
                       <p className="text-sm text-gray-600">Pagado: Bs. {Number(c.monto_pagado).toFixed(2)}</p>
                       <div className="flex gap-2">
-                        <button onClick={() => setEditandoCompra({...c})} className="text-blue-600 text-sm font-medium bg-blue-50 px-4 py-3 rounded-xl">Editar</button>
-                        <button onClick={() => eliminarCompra(c.id)} className="text-red-500 text-sm font-medium bg-red-50 px-4 py-3 rounded-xl">Eliminar</button>
+                        <Boton variante="suave" onClick={() => setEditandoCompra({ ...c })}>Editar</Boton>
+                        <Boton variante="peligro" onClick={() => handleEliminarCompra(c.id)}>Eliminar</Boton>
                       </div>
                     </div>
                   </div>
                 ))}
+                {compras.length >= LIMITE_HISTORIAL && (
+                  <p className="text-xs text-gray-400 text-center">Se muestran las últimas {LIMITE_HISTORIAL} compras. Los totales incluyen todo el historial.</p>
+                )}
               </div>
             )}
           </div>
@@ -302,30 +230,24 @@ function Cervezas() {
           <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
             <h2 className="text-base font-semibold text-gray-700 mb-4">Registrar movimiento de cajas</h2>
             <form onSubmit={handleSubmitCajas} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={formCajas.fecha} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Tipo</label>
-                <select name="tipo" value={formCajas.tipo} onChange={handleChangeCajas} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
+              <Campo etiqueta="Fecha">
+                <Entrada type="date" name="fecha" value={formCajas.fecha} onChange={handleChangeCajas} required />
+              </Campo>
+              <Campo etiqueta="Tipo">
+                <Selector name="tipo" value={formCajas.tipo} onChange={handleChangeCajas} required>
                   <option value="">Seleccioná</option>
-                  <option value="debe">Debe (cajas recibidas a devolver)</option>
-                  <option value="devolucion">Devolución (cajas que devolví)</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
+                  <option value={TIPOS_MOVIMIENTO_CAJAS.DEBE}>Debe (cajas recibidas a devolver)</option>
+                  <option value={TIPOS_MOVIMIENTO_CAJAS.DEVOLUCION}>Devolución (cajas que devolví)</option>
+                </Selector>
+              </Campo>
+              <Campo etiqueta="Cantidad de cajas">
                 <CampoCantidad name="cajas_recibidas" value={formCajas.cajas_recibidas} onChange={handleChangeCajas} placeholder="Ej: 71" required />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
+              </Campo>
+              <Campo etiqueta="Monto (Bs.)">
+                <Entrada type="number" min="0" step="0.01" name="monto" value={formCajas.monto} onChange={handleChangeCajas} placeholder="Ej: 13260" />
+              </Campo>
               <div className="col-span-1 md:col-span-2">
-                <button type="submit" disabled={loading} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {loading ? 'Guardando...' : 'Registrar movimiento'}
-                </button>
+                <Boton type="submit" cargando={guardando} className="w-full md:w-auto px-6">Registrar movimiento</Boton>
               </div>
             </form>
           </div>
@@ -343,99 +265,77 @@ function Cervezas() {
                         <p className="text-sm font-medium text-gray-800">{formatearFecha(c.fecha)}</p>
                         <p className="text-sm text-gray-600">{c.cajas_recibidas} cajas</p>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.tipo === 'debe' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                        {c.tipo === 'debe' ? 'Debe' : 'Devolución'}
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${c.tipo === TIPOS_MOVIMIENTO_CAJAS.DEBE ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {c.tipo === TIPOS_MOVIMIENTO_CAJAS.DEBE ? 'Debe' : 'Devolución'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <p className="text-sm text-gray-600">Monto: Bs. {Number(c.monto || 0).toFixed(2)}</p>
                       <div className="flex gap-2">
-                        <button onClick={() => setEditandoCaja({...c})} className="text-blue-600 text-sm font-medium bg-blue-50 px-4 py-3 rounded-xl">Editar</button>
-                        <button onClick={() => eliminarCaja(c.id)} className="text-red-500 text-sm font-medium bg-red-50 px-4 py-3 rounded-xl">Eliminar</button>
+                        <Boton variante="suave" onClick={() => setEditandoCaja({ ...c })}>Editar</Boton>
+                        <Boton variante="peligro" onClick={() => handleEliminarCaja(c.id)}>Eliminar</Boton>
                       </div>
                     </div>
                   </div>
                 ))}
+                {cajas.length >= LIMITE_HISTORIAL && (
+                  <p className="text-xs text-gray-400 text-center">Se muestran los últimos {LIMITE_HISTORIAL} movimientos. Los totales incluyen todo el historial.</p>
+                )}
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* Modal editar compra */}
       {editandoCompra && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end md:items-center justify-center z-50" onClick={() => setEditandoCompra(null)}>
-          <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Editar compra</h3>
-              <button onClick={() => setEditandoCompra(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={editandoCompra.fecha} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <CampoCantidad name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Precio por caja (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Monto pagado (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setEditandoCompra(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
-              <button onClick={guardarEdicionCompra} disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
-                {loading ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
+        <Modal titulo="Editar compra" onCerrar={() => setEditandoCompra(null)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Campo etiqueta="Fecha">
+              <Entrada type="date" name="fecha" value={editandoCompra.fecha} onChange={handleChangeEditar} />
+            </Campo>
+            <Campo etiqueta="Cantidad de cajas">
+              <CampoCantidad name="cantidad_cajas" value={editandoCompra.cantidad_cajas} onChange={handleChangeEditar} />
+            </Campo>
+            <Campo etiqueta="Precio por caja (Bs.)">
+              <Entrada type="number" min="0" step="0.01" name="precio_unitario" value={editandoCompra.precio_unitario} onChange={handleChangeEditar} />
+            </Campo>
+            <Campo etiqueta="Monto pagado (Bs.)">
+              <Entrada type="number" min="0" step="0.01" name="monto_pagado" value={editandoCompra.monto_pagado} onChange={handleChangeEditar} />
+            </Campo>
           </div>
-        </div>
+          <div className="flex gap-3 mt-6">
+            <Boton variante="secundario" onClick={() => setEditandoCompra(null)} className="flex-1">Cancelar</Boton>
+            <Boton cargando={guardando} onClick={guardarEdicionCompra} className="flex-1">Guardar</Boton>
+          </div>
+        </Modal>
       )}
 
-      {/* Modal editar caja */}
       {editandoCaja && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-end md:items-center justify-center z-50" onClick={() => setEditandoCaja(null)}>
-          <div className="bg-white rounded-t-2xl md:rounded-2xl p-6 w-full md:max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">Editar cajas</h3>
-              <button onClick={() => setEditandoCaja(null)} className="text-gray-400 text-xl font-bold p-2 -m-2">✕</button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Fecha</label>
-                <input type="date" name="fecha" value={editandoCaja.fecha} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Tipo</label>
-                <select name="tipo" value={editandoCaja.tipo} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm">
-                  <option value="debe">Debe</option>
-                  <option value="devolucion">Devolución</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Cantidad de cajas</label>
-                <CampoCantidad name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 block mb-1">Monto (Bs.)</label>
-                <input type="number" min="0" step="0.01" name="monto" value={editandoCaja.monto} onChange={handleChangeEditarCaja} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setEditandoCaja(null)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-medium">Cancelar</button>
-              <button onClick={guardarEdicionCaja} disabled={loading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium disabled:opacity-50">
-                {loading ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
+        <Modal titulo="Editar cajas" onCerrar={() => setEditandoCaja(null)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Campo etiqueta="Fecha">
+              <Entrada type="date" name="fecha" value={editandoCaja.fecha} onChange={handleChangeEditarCaja} />
+            </Campo>
+            <Campo etiqueta="Tipo">
+              <Selector name="tipo" value={editandoCaja.tipo} onChange={handleChangeEditarCaja}>
+                <option value={TIPOS_MOVIMIENTO_CAJAS.DEBE}>Debe</option>
+                <option value={TIPOS_MOVIMIENTO_CAJAS.DEVOLUCION}>Devolución</option>
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Cantidad de cajas">
+              <CampoCantidad name="cajas_recibidas" value={editandoCaja.cajas_recibidas} onChange={handleChangeEditarCaja} />
+            </Campo>
+            <Campo etiqueta="Monto (Bs.)">
+              <Entrada type="number" min="0" step="0.01" name="monto" value={editandoCaja.monto ?? ''} onChange={handleChangeEditarCaja} />
+            </Campo>
           </div>
-        </div>
+          <div className="flex gap-3 mt-6">
+            <Boton variante="secundario" onClick={() => setEditandoCaja(null)} className="flex-1">Cancelar</Boton>
+            <Boton cargando={guardando} onClick={guardarEdicionCaja} className="flex-1">Guardar</Boton>
+          </div>
+        </Modal>
       )}
+
       {dialogoConfirmacion}
       {toast && <Toast mensaje={toast.mensaje} tipo={toast.tipo} onClose={() => setToast(null)} />}
     </div>
