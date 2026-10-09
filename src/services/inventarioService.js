@@ -118,42 +118,11 @@ export async function guardarRetornoEvento(filas) {
   return { error: error || null }
 }
 
-// Descuenta del catálogo maestro (rota + faltante) por ítem y marca el acta como cerrada.
-// Solo procesa filas que todavía no estén cerradas, para que llamarla dos veces no descuente doble.
+// Cierra el acta en una sola transacción (función SQL cerrar_acta_evento):
+// descuenta del inventario lo roto/faltante, marca el acta como cerrada y suma el cobro
+// al saldo del evento. Si algo falla no se aplica nada, y llamarla dos veces no descuenta doble.
+// Devuelve { error, cobro } con el monto que se sumó al saldo del evento.
 export async function cerrarActaEvento(eventoId) {
-  const { data: filas, error: errorFilas } = await supabase
-    .from('evento_inventario')
-    .select('id, item_id, cantidad_entregada, cantidad_devuelta, cantidad_rota')
-    .eq('evento_id', eventoId)
-    .eq('cerrado', false)
-  if (errorFilas) return { error: errorFilas }
-  if (!filas || filas.length === 0) return { error: null }
-
-  for (const fila of filas) {
-    const { faltante } = calcularComparacionFila(fila)
-    const perdida = (Number(fila.cantidad_rota) || 0) + faltante
-    if (perdida > 0) {
-      const { data: item, error: errorItem } = await supabase
-        .from('inventario_items')
-        .select('cantidad_actual')
-        .eq('id', fila.item_id)
-        .single()
-      if (errorItem) return { error: errorItem }
-
-      const nuevaCantidad = Math.max((item?.cantidad_actual || 0) - perdida, 0)
-      const { error: errorUpdate } = await supabase
-        .from('inventario_items')
-        .update({ cantidad_actual: nuevaCantidad })
-        .eq('id', fila.item_id)
-      if (errorUpdate) return { error: errorUpdate }
-    }
-  }
-
-  const { error: errorCerrar } = await supabase
-    .from('evento_inventario')
-    .update({ cerrado: true })
-    .eq('evento_id', eventoId)
-    .eq('cerrado', false)
-
-  return { error: errorCerrar || null }
+  const { data, error } = await supabase.rpc('cerrar_acta_evento', { p_evento_id: eventoId })
+  return { error: error || null, cobro: Number(data) || 0 }
 }

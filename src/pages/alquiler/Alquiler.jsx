@@ -12,6 +12,20 @@ function obtenerFechaLimite() {
   return sumarDiasISO(7)
 }
 
+function soloDigitos(texto) {
+  return String(texto || '').replace(/\D/g, '')
+}
+
+// Celulares de 8 dígitos y fijos de 7
+function telefonoValido(telefono) {
+  return /^\d{7,8}$/.test(telefono)
+}
+
+// Deja solo caracteres seguros para armar el filtro .or() de Supabase
+function limpiarParaFiltro(texto) {
+  return String(texto || '').replace(/[^0-9A-Za-z-]/g, '')
+}
+
 function Alquiler() {
   const [eventos, setEventos] = useState([])
   const [garantiasPorEvento, setGarantiasPorEvento] = useState({})
@@ -57,6 +71,13 @@ function Alquiler() {
       .update({ estado: 'ejecutada' })
       .eq('estado', 'pendiente')
       .lt('fecha_limite', hoy)
+    // Un evento ya pagado cuya fecha pasó se marca como completado
+    await supabase
+      .from('eventos')
+      .update({ estado: 'completado' })
+      .eq('estado', 'reservado')
+      .eq('pagado', true)
+      .or(`fecha_fin.lt.${hoy},and(fecha_fin.is.null,fecha.lt.${hoy})`)
     cargarEventos()
   }
 
@@ -119,35 +140,59 @@ function Alquiler() {
   const adelanto = parseFloat(form.adelanto) || 0
   const saldoPendiente = montoTotalFinal - adelanto
 
+  // Busca un evento que ocupe alguna de las fechas. Un evento completado solo libera su
+  // fecha cuando ya pasó (uno pagado por adelantado sigue ocupando el día).
+  async function buscarConflicto(fechaInicio, fechaFin, excluirId = null) {
+    const { data: existentes, error } = await supabase
+      .from('eventos')
+      .select('id, fecha, fecha_fin, estado, clientes(nombre)')
+    if (error || !existentes) return { error: error || new Error('sin datos') }
+
+    const hoyLocal = fechaLocalISO()
+    const conflicto = existentes.find(ev => {
+      if (ev.id === excluirId) return false
+      const eFin = ev.fecha_fin || ev.fecha
+      if (ev.estado === 'completado' && eFin < hoyLocal) return false
+      return fechaInicio <= eFin && fechaFin >= ev.fecha
+    })
+    return { conflicto }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
 
-    const { data: eventosExistentes } = await supabase
-      .from('eventos')
-      .select('id, fecha, fecha_fin, estado, clientes(nombre)')
-
     const fechaInicio = form.fecha
     const fechaFin = form.dos_dias ? form.fecha_fin : form.fecha
 
-    const hoyLocal = fechaLocalISO()
+    const telefono = soloDigitos(form.telefono)
+    const telefono2 = soloDigitos(form.telefono2)
+    if (!telefonoValido(telefono) || (telefono2 && !telefonoValido(telefono2))) {
+      mostrarToast('El teléfono debe tener 7 u 8 dígitos', 'error')
+      setLoading(false)
+      return
+    }
+    if (fechaFin < fechaInicio) {
+      mostrarToast('La fecha fin no puede ser anterior a la de inicio', 'error')
+      setLoading(false)
+      return
+    }
 
-    const conflicto = eventosExistentes?.find(e => {
-      const eInicio = e.fecha
-      const eFin = e.fecha_fin || e.fecha
-      // Un evento pagado antes de realizarse sigue ocupando su fecha; solo se libera cuando ya pasó
-      if (e.estado === 'completado' && eFin < hoyLocal) return false
-      return fechaInicio <= eFin && fechaFin >= eInicio
-    })
-
+    const { conflicto, error: errorDisponibilidad } = await buscarConflicto(fechaInicio, fechaFin)
+    if (errorDisponibilidad) {
+      mostrarToast('No se pudo verificar la disponibilidad de la fecha. Intentá de nuevo', 'error')
+      setLoading(false)
+      return
+    }
     if (conflicto) {
       mostrarToast(`Fecha ocupada — ya hay un evento de ${conflicto.clientes?.nombre} el ${formatearFecha(conflicto.fecha)}`, 'error')
       setLoading(false)
       return
     }
 
-    const filtrosCliente = [`telefono.eq.${form.telefono}`, `telefono2.eq.${form.telefono}`]
-    if (form.ci_nit) filtrosCliente.push(`ci_nit.eq.${form.ci_nit}`)
+    const filtrosCliente = [`telefono.eq.${telefono}`, `telefono2.eq.${telefono}`]
+    const ciFiltro = limpiarParaFiltro(form.ci_nit)
+    if (ciFiltro) filtrosCliente.push(`ci_nit.eq.${ciFiltro}`)
     const { data: clienteExistente } = await supabase
       .from('clientes')
       .select('*')
@@ -162,7 +207,7 @@ function Alquiler() {
       // No se pisan el nombre ni el teléfono guardados; solo se completan datos que estaban vacíos
       const datosFaltantes = {}
       if (!clienteExistente.ci_nit && form.ci_nit) datosFaltantes.ci_nit = form.ci_nit
-      if (!clienteExistente.telefono2 && form.telefono2 && form.telefono2 !== clienteExistente.telefono) datosFaltantes.telefono2 = form.telefono2
+      if (!clienteExistente.telefono2 && telefono2 && telefono2 !== clienteExistente.telefono) datosFaltantes.telefono2 = telefono2
 
       if (Object.keys(datosFaltantes).length > 0) {
         const { data: clienteActualizado, error: errorCliente } = await supabase
@@ -183,7 +228,7 @@ function Alquiler() {
     } else {
       const { data: clienteNuevo, error: errorCliente } = await supabase
         .from('clientes')
-        .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono: form.telefono, telefono2: form.telefono2 || null })
+        .insert({ nombre: form.nombre, ci_nit: form.ci_nit, telefono, telefono2: telefono2 || null })
         .select().single()
       if (errorCliente) {
         mostrarToast('Error al registrar el cliente', 'error')
@@ -204,6 +249,7 @@ function Alquiler() {
       monto_lavado: montoLavado,
       adelanto: adelanto,
       saldo_pendiente: saldoPendiente > 0 ? saldoPendiente : 0,
+      pagado: saldoPendiente <= 0,
       estado: 'reservado'
     })
 
@@ -228,11 +274,15 @@ function Alquiler() {
   }
 
   async function marcarPagado(evento) {
+    const saldo = Number(evento.saldo_pendiente) || 0
+    if (!(await confirmar(`¿Marcar el saldo de Bs. ${saldo.toFixed(2)} como pagado?`, { titulo: 'Marcar como pagado', textoConfirmar: 'Sí, pagado', peligro: false }))) return
+    const yaRealizado = (evento.fecha_fin || evento.fecha) < fechaLocalISO()
     const { error } = await supabase.from('eventos').update({
       saldo_pendiente: 0,
-      estado: 'completado',
+      pagado: true,
       fecha_pago: fechaLocalISO(),
-      monto_saldo_cobrado: Number(evento.saldo_pendiente) || 0
+      monto_saldo_cobrado: (Number(evento.monto_saldo_cobrado) || 0) + saldo,
+      ...(yaRealizado ? { estado: 'completado' } : {})
     }).eq('id', evento.id)
     if (error) {
       mostrarToast('No se pudo marcar como pagado', 'error')
@@ -282,28 +332,73 @@ function Alquiler() {
 
   async function guardarEdicionEvento() {
     setLoading(true)
+    const original = eventos.find(x => x.id === editandoEvento.id)
+
+    const telefono = soloDigitos(editandoEvento.clientes.telefono)
+    const telefono2 = soloDigitos(editandoEvento.clientes.telefono2)
+    if (!telefonoValido(telefono) || (telefono2 && !telefonoValido(telefono2))) {
+      mostrarToast('El teléfono debe tener 7 u 8 dígitos', 'error')
+      setLoading(false)
+      return
+    }
+
+    const fechaInicio = editandoEvento.fecha
+    const fechaFin = editandoEvento.fecha_fin || editandoEvento.fecha
+    if (fechaFin < fechaInicio) {
+      mostrarToast('La fecha fin no puede ser anterior a la de inicio', 'error')
+      setLoading(false)
+      return
+    }
+
+    const saldoAnterior = Number(original?.saldo_pendiente) || 0
+    const saldoNuevo = parseFloat(editandoEvento.saldo_pendiente) || 0
+    if (saldoNuevo < 0 || (parseFloat(editandoEvento.adelanto) || 0) < 0) {
+      mostrarToast('Los montos no pueden ser negativos', 'error')
+      setLoading(false)
+      return
+    }
+
+    // Solo se revisa la disponibilidad si cambiaron las fechas, para no bloquear ediciones
+    // de eventos que ya se solapaban antes.
+    const cambioFechas = fechaInicio !== original?.fecha || (editandoEvento.fecha_fin || null) !== (original?.fecha_fin || null)
+    if (cambioFechas) {
+      const { conflicto, error: errorDisponibilidad } = await buscarConflicto(fechaInicio, fechaFin, editandoEvento.id)
+      if (errorDisponibilidad) {
+        mostrarToast('No se pudo verificar la disponibilidad de la fecha. Intentá de nuevo', 'error')
+        setLoading(false)
+        return
+      }
+      if (conflicto) {
+        mostrarToast(`Fecha ocupada — ya hay un evento de ${conflicto.clientes?.nombre} el ${formatearFecha(conflicto.fecha)}`, 'error')
+        setLoading(false)
+        return
+      }
+    }
+
     const { error: errorCliente } = await supabase.from('clientes').update({
       nombre: editandoEvento.clientes.nombre,
       ci_nit: editandoEvento.clientes.ci_nit,
-      telefono: editandoEvento.clientes.telefono,
-      telefono2: editandoEvento.clientes.telefono2 || null
+      telefono,
+      telefono2: telefono2 || null
     }).eq('id', editandoEvento.clientes.id)
     if (errorCliente) {
       mostrarToast('Error al actualizar el cliente', 'error')
       setLoading(false)
       return
     }
-    const seCompletaAhora = editandoEvento.estado === 'completado' && !editandoEvento.fecha_pago
-    const saldoIngresado = parseFloat(editandoEvento.saldo_pendiente) || 0
+
+    // Si el saldo pasó de tener deuda a cero, se registra el cobro
+    const seCobra = saldoAnterior > 0 && saldoNuevo === 0
     const { error: errorEdicion } = await supabase.from('eventos').update({
       tipo_evento: editandoEvento.tipo_evento,
       fecha: editandoEvento.fecha,
       fecha_fin: editandoEvento.fecha_fin || null,
       observaciones: editandoEvento.observaciones,
       adelanto: parseFloat(editandoEvento.adelanto) || 0,
-      saldo_pendiente: editandoEvento.estado === 'completado' ? 0 : saldoIngresado,
+      saldo_pendiente: saldoNuevo,
+      pagado: saldoNuevo === 0,
       estado: editandoEvento.estado,
-      ...(seCompletaAhora ? { fecha_pago: fechaLocalISO(), monto_saldo_cobrado: saldoIngresado } : {})
+      ...(seCobra ? { fecha_pago: fechaLocalISO(), monto_saldo_cobrado: (Number(original?.monto_saldo_cobrado) || 0) + saldoAnterior } : {})
     }).eq('id', editandoEvento.id)
     if (errorEdicion) {
       mostrarToast('Error al actualizar el evento', 'error')
@@ -371,9 +466,9 @@ function Alquiler() {
     return { texto: `${dias} días restantes`, color: 'text-gray-500' }
   }
 
-  const eventosProximos = eventos.filter(e => e.fecha >= hoy && e.estado === 'reservado')
+  const eventosProximos = eventos.filter(e => (e.fecha_fin || e.fecha) >= hoy && e.estado === 'reservado')
   const eventosCompletados = eventos.filter(e => e.estado === 'completado')
-  const totalSaldoPendiente = eventos.filter(e => e.estado === 'reservado').reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
+  const totalSaldoPendiente = eventos.filter(e => Number(e.saldo_pendiente) > 0).reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
 
   const opcionesTipoEvento = (
     <>
@@ -433,11 +528,11 @@ function Alquiler() {
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 1</label>
-                <input type="tel" inputMode="numeric" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Ej: 70012345" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="tel" inputMode="numeric" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Ej: 70012345" required pattern="[0-9]{7,8}" title="7 u 8 dígitos" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Teléfono 2 (opcional)</label>
-                <input type="tel" inputMode="numeric" name="telefono2" value={form.telefono2} onChange={handleChange} placeholder="Ej: 60098765" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
+                <input type="tel" inputMode="numeric" name="telefono2" value={form.telefono2} onChange={handleChange} placeholder="Ej: 60098765" pattern="[0-9]{7,8}" title="7 u 8 dígitos" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-sm text-gray-600 block mb-1">Tipo de evento</label>
@@ -539,9 +634,12 @@ function Alquiler() {
                           {e.clientes?.ci_nit && <p className="text-sm text-gray-500">CI: {e.clientes.ci_nit}</p>}
                           {e.observaciones && <p className="text-sm text-gray-500 mt-1 italic">{e.observaciones}</p>}
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium flex-shrink-0 ${e.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {e.estado === 'completado' ? '✓ Completado' : '⏳ Reservado'}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${e.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            {e.estado === 'completado' ? '✓ Completado' : '⏳ Reservado'}
+                          </span>
+                          {e.pagado && <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-700">💰 Pagado</span>}
+                        </div>
                       </div>
                       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-3 border-t border-gray-100">
                         <div>
@@ -552,7 +650,7 @@ function Alquiler() {
                           <p className="text-sm text-gray-600">Saldo: <span className={`font-medium ${Number(e.saldo_pendiente) > 0 ? 'text-yellow-700' : 'text-green-600'}`}>Bs. {Number(e.saldo_pendiente).toFixed(2)}</span></p>
                         </div>
                         <div className="flex flex-wrap gap-2 sm:justify-end">
-                          {e.estado !== 'completado' && Number(e.saldo_pendiente) > 0 && (
+                          {Number(e.saldo_pendiente) > 0 && (
                             <button onClick={() => marcarPagado(e)} className="bg-green-600 text-white px-4 py-3 rounded-xl text-sm font-medium">Pagado</button>
                           )}
                           <button onClick={() => { setModalGarantia(e); setFormGarantia({ cajas_llevadas: '', botellas_llevadas: '', monto_garantia: '', fecha_limite: obtenerFechaLimite(), observaciones: '' }) }} className="bg-purple-50 text-purple-600 px-4 py-3 rounded-xl text-sm font-medium">+ Garantía</button>

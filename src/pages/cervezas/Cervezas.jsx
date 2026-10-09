@@ -10,6 +10,14 @@ function obtenerFechaHoy() {
   return fechaLocalISO()
 }
 
+function validarCompra({ cantidad, precio, pagado }) {
+  if (!Number.isInteger(cantidad) || cantidad <= 0) return 'La cantidad de cajas debe ser mayor que 0'
+  if (!(precio >= 0)) return 'Ingresá un precio válido'
+  if (pagado < 0) return 'El monto pagado no puede ser negativo'
+  if (pagado > cantidad * precio) return `El monto pagado no puede superar el total (Bs. ${(cantidad * precio).toFixed(2)})`
+  return null
+}
+
 function Cervezas() {
   const [compras, setCompras] = useState([])
   const [cajas, setCajas] = useState([])
@@ -83,6 +91,12 @@ function Cervezas() {
     const pagado = parseFloat(form.monto_pagado) || 0
     const total = cantidad * precio
     const deuda = total - pagado
+    const mensajeError = validarCompra({ cantidad, precio, pagado })
+    if (mensajeError) {
+      mostrarToast(mensajeError, 'error')
+      setLoading(false)
+      return
+    }
     const { error } = await supabase.from('compras_cerveza').insert({
       fecha: form.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
     })
@@ -102,6 +116,11 @@ function Cervezas() {
     const recibidas = parseInt(formCajas.cajas_recibidas)
     const devueltas = formCajas.tipo === 'devolucion' ? recibidas : 0
     const pendientes = formCajas.tipo === 'debe' ? recibidas : 0
+    if (!(recibidas > 0)) {
+      mostrarToast('La cantidad de cajas debe ser mayor que 0', 'error')
+      setLoading(false)
+      return
+    }
     const { error } = await supabase.from('cajas_vacias').insert({
       fecha: formCajas.fecha, tipo: formCajas.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(formCajas.monto) || 0
     })
@@ -122,6 +141,12 @@ function Cervezas() {
     const pagado = parseFloat(editandoCompra.monto_pagado) || 0
     const total = cantidad * precio
     const deuda = total - pagado
+    const mensajeError = validarCompra({ cantidad, precio, pagado })
+    if (mensajeError) {
+      mostrarToast(mensajeError, 'error')
+      setLoading(false)
+      return
+    }
     const { error } = await supabase.from('compras_cerveza').update({
       fecha: editandoCompra.fecha, cantidad_cajas: cantidad, precio_unitario: precio, total, monto_pagado: pagado, deuda_pendiente: deuda
     }).eq('id', editandoCompra.id)
@@ -141,6 +166,11 @@ function Cervezas() {
     const recibidas = parseInt(editandoCaja.cajas_recibidas)
     const devueltas = editandoCaja.tipo === 'devolucion' ? recibidas : 0
     const pendientes = editandoCaja.tipo === 'debe' ? recibidas : 0
+    if (!(recibidas > 0)) {
+      mostrarToast('La cantidad de cajas debe ser mayor que 0', 'error')
+      setLoading(false)
+      return
+    }
     const { error } = await supabase.from('cajas_vacias').update({
       fecha: editandoCaja.fecha, tipo: editandoCaja.tipo, cajas_recibidas: recibidas, cajas_devueltas: devueltas, cajas_pendientes: pendientes, monto: parseFloat(editandoCaja.monto) || 0
     }).eq('id', editandoCaja.id)

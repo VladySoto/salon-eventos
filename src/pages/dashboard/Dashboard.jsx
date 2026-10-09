@@ -99,9 +99,9 @@ function Dashboard() {
   const totalDebe = cajas.filter(c => c.tipo === 'debe').reduce((acc, c) => acc + Number(c.cajas_recibidas), 0)
   const totalDevuelto = cajas.filter(c => c.tipo === 'devolucion').reduce((acc, c) => acc + Number(c.cajas_recibidas), 0)
   const cajasPendientes = totalDebe - totalDevuelto
-  const eventosProximos = eventos.filter(e => e.fecha >= hoyStr && e.estado === 'reservado')
+  const eventosProximos = eventos.filter(e => (e.fecha_fin || e.fecha) >= hoyStr && e.estado === 'reservado')
   const eventosEsteMes = eventos.filter(e => e.fecha >= inicioMes && e.estado === 'completado')
-  const saldoPendienteTotal = eventos.filter(e => e.estado === 'reservado').reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
+  const saldoPendienteTotal = eventos.filter(e => Number(e.saldo_pendiente) > 0).reduce((acc, e) => acc + Number(e.saldo_pendiente), 0)
   const adelantosEsteMes = eventos.filter(e => e.created_at?.slice(0, 10) >= inicioMes).reduce((acc, e) => acc + Number(e.adelanto), 0)
   const saldosCobradosEsteMes = eventos.filter(e => e.fecha_pago && e.fecha_pago >= inicioMes).reduce((acc, e) => acc + Number(e.monto_saldo_cobrado ?? 0), 0)
   const gananciasEsteMes = adelantosEsteMes + saldosCobradosEsteMes

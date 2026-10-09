@@ -119,7 +119,16 @@ function ActaEvento() {
   const filasEntregadas = filasActa.filter(f => f.cantidad_entregada > 0).map(filaConCalculo)
   const totalCobro = calcularTotalCobro(filasEntregadas)
 
+  function filaConExceso(fila) {
+    return (Number(fila.cantidad_devuelta) || 0) + (Number(fila.cantidad_rota) || 0) > fila.cantidad_entregada
+  }
+  const hayExceso = filasEntregadas.some(filaConExceso)
+
   async function handleGuardarRetorno() {
+    if (hayExceso) {
+      mostrarToast('Revisá las cantidades: devuelto + roto no puede superar lo entregado', 'error')
+      return
+    }
     setGuardando(true)
     const filas = filasEntregadas.map(f => ({
       id: f.id,
@@ -139,7 +148,11 @@ function ActaEvento() {
   }
 
   async function handleConfirmarCierre() {
-    if (!(await confirmar('¿Confirmar el retorno y cerrar el acta? Esto va a descontar del inventario las pérdidas y ya no se va a poder editar.', { titulo: 'Cerrar acta', textoConfirmar: 'Cerrar acta', peligro: false }))) return
+    if (hayExceso) {
+      mostrarToast('Revisá las cantidades: devuelto + roto no puede superar lo entregado', 'error')
+      return
+    }
+    if (!(await confirmar(`¿Confirmar el retorno y cerrar el acta? Esto va a descontar del inventario las pérdidas y ya no se va a poder editar.${totalCobro > 0 ? ` Se van a sumar Bs. ${totalCobro.toFixed(2)} al saldo del evento.` : ''}`, { titulo: 'Cerrar acta', textoConfirmar: 'Cerrar acta', peligro: false }))) return
     setGuardando(true)
     const filas = filasEntregadas.map(f => ({
       id: f.id,
@@ -154,9 +167,9 @@ function ActaEvento() {
       setGuardando(false)
       return
     }
-    const { error: errorCierre } = await cerrarActaEvento(eventoId)
+    const { error: errorCierre, cobro } = await cerrarActaEvento(eventoId)
     if (!errorCierre) {
-      mostrarToast('Acta cerrada — inventario actualizado')
+      mostrarToast(cobro > 0 ? `Acta cerrada — se sumaron Bs. ${cobro.toFixed(2)} al saldo del evento` : 'Acta cerrada — inventario actualizado')
       cargarDatos()
     } else {
       mostrarToast('Error al cerrar el acta', 'error')
@@ -255,6 +268,9 @@ function ActaEvento() {
                       <ContadorCantidad valor={fila.cantidad_rota} onCambiar={v => cambiarRetorno(fila.id, 'cantidad_rota', v)} disabled={actaCerrada} />
                     </div>
                   </div>
+                  {filaConExceso(fila) && (
+                    <p className="text-sm text-red-600 mb-2">Devuelto + roto supera lo entregado ({fila.cantidad_entregada}). Corregilo para poder guardar.</p>
+                  )}
                   <p className="text-xs text-gray-500 pt-2 border-t border-gray-100">
                     Faltante: <span className={`font-medium ${fila.faltante > 0 ? 'text-red-600' : 'text-gray-600'}`}>{fila.faltante}</span>
                   </p>
